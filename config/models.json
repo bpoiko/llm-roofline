@@ -1,0 +1,153 @@
+{
+  "llamacpp:~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf": {
+    "runtime": "llamacpp",
+    "model": "~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf",
+    "label": "qwen3.5-9b",
+    "quant": "Q4_K",
+    "bytes": {
+      "embed": 572129280,
+      "layers": 4263053312,
+      "lm_head": 834355200,
+      "other": 16384
+    },
+    "weight_bytes_per_token": 5097424896,
+    "mtp_bytes": 0,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 32,
+      "n_full_attn_layers": 8,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 24,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 32,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 32768,
+    "state_bytes_per_token": 100663296
+  },
+  "mlx:mlx-community/Qwen3.5-9B-4bit": {
+    "runtime": "mlx",
+    "model": "mlx-community/Qwen3.5-9B-4bit",
+    "label": "qwen3.5-9b",
+    "quant": "4bit",
+    "bytes": {
+      "embed": 572129280,
+      "layers": 3893774848,
+      "lm_head": 572129280,
+      "other": 8192,
+      "vision": 912020960
+    },
+    "weight_bytes_per_token": 4465912320,
+    "mtp_bytes": 0,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 32,
+      "n_full_attn_layers": 8,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 24,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 32,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 32768,
+    "state_bytes_per_token": 100663296
+  },
+  "mlx:mlx-community/Qwen3.6-27B-4bit": {
+    "runtime": "mlx",
+    "model": "mlx-community/Qwen3.6-27B-4bit",
+    "label": "qwen3.6-27b",
+    "quant": "4bit",
+    "bytes": {
+      "embed": 715161600,
+      "layers": 13702468608,
+      "lm_head": 715161600,
+      "other": 10240,
+      "vision": 921460192
+    },
+    "weight_bytes_per_token": 14417640448,
+    "mtp_bytes": 0,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 64,
+      "n_full_attn_layers": 16,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 48,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 48,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 65536,
+    "state_bytes_per_token": 301989888
+  },
+  "ollama:qwen3.5:9b": {
+    "runtime": "ollama",
+    "model": "qwen3.5:9b",
+    "label": "qwen3.5-9b",
+    "quant": "modelopt",
+    "bytes": {
+      "embed": 1048903968,
+      "layers": 4123137568,
+      "lm_head": 1048903912,
+      "mtp": 486582864,
+      "other": 8296,
+      "vision": 912057944
+    },
+    "weight_bytes_per_token": 5172049776,
+    "mtp_bytes": 486582864,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 32,
+      "n_full_attn_layers": 8,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 24,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 32,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 32768,
+    "state_bytes_per_token": 100663296
+  },
+  "ollama:qwen3.6:27b": {
+    "runtime": "ollama",
+    "model": "qwen3.6:27b",
+    "label": "qwen3.6-27b",
+    "quant": "modelopt",
+    "bytes": {
+      "embed": 2542796928,
+      "layers": 13736616192,
+      "lm_head": 715161924,
+      "mtp": 849400424,
+      "other": 10344,
+      "vision": 921497176
+    },
+    "weight_bytes_per_token": 14451788460,
+    "mtp_bytes": 849400424,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 64,
+      "n_full_attn_layers": 16,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 48,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 48,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 65536,
+    "state_bytes_per_token": 301989888
+  }
+}
