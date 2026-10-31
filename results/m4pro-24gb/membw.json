@@ -1,0 +1,45 @@
+{
+  "machine": "m4pro-24gb",
+  "timestamp_utc": "2026-10-31T21:16:39+00:00",
+  "method": "mlx 2.0 GiB float32, best/median of 30",
+  "kernels": {
+    "read": {
+      "best_gbs": 259.5,
+      "median_gbs": 257.8
+    },
+    "copy": {
+      "best_gbs": 232.9,
+      "median_gbs": 232.0
+    },
+    "triad": {
+      "best_gbs": 238.4,
+      "median_gbs": 237.7
+    }
+  },
+  "env": {
+    "host": {
+      "chip": "Apple M4 Pro",
+      "cpu_cores_total": 12,
+      "cpu_cores_performance": 8,
+      "cpu_cores_efficiency": 4,
+      "gpu_name": "Apple M4 Pro",
+      "gpu_cores": 16,
+      "ram_gb": 24,
+      "gpu_wired_limit_mb": 20480,
+      "power_source": "AC Power",
+      "charger_w": 60,
+      "battery_pct": 24,
+      "energy_mode": "high power",
+      "os": "macOS",
+      "os_version": "27.0.1",
+      "os_build": "26A434",
+      "arch": "arm64",
+      "python": "3.12.12"
+    },
+    "runtime": {
+      "name": "mlx",
+      "version": "0.32.4"
+    }
+  },
+  "bandwidth_gbs": 259.5
+}
