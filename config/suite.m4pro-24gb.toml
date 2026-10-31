@@ -1,0 +1,8 @@
+# Overrides for the 24 GB M4 Pro, merged over suite.toml.
+
+# Per-model context-depth caps (by label). The 27B is ~19 GB resident; at 16k context
+# the machine went into swap thrash (decode 7.8 t/s vs ~17 ceiling, then a prefill
+# that hung for 9 hours), even though it fits under the raised 20 GB GPU wired limit:
+# macOS and everything else still need the remaining RAM.
+[max_depth]
+"qwen3.6-27b" = 4096

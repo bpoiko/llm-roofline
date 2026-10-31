@@ -79,3 +79,23 @@ def test_end_to_end_plots(tmp_path, monkeypatch):
         assert (out / f).stat().st_size > 0
     summary = list(csv.DictReader(open(out / "summary.csv")))
     assert {r["prompt_type"] for r in summary} == {"counting", "essay", "random"}
+
+
+def test_depth_caps_from_model_and_machine_override():
+    cfg = {"max_depth": {"big": 4096}}
+    assert suite.depths_for(cfg, {"label": "small"}, [0, 4096, 16384]) == [0, 4096, 16384]
+    assert suite.depths_for(cfg, {"label": "big"}, [0, 4096, 16384]) == [0, 4096]
+    assert suite.depths_for(cfg, {"label": "big", "max_depth": 0}, [0, 4096]) == [0]
+
+
+def test_models_grouped_by_effective_depths():
+    cfg = {"max_depth": {"big": 4096}}
+    models = [{"label": "small", "ollama": "s"}, {"label": "big", "ollama": "b"}, {"label": "s2", "ollama": "s2"}]
+    assert suite.by_depths(cfg, models, "ollama", [0, 4096, 16384]) == {
+        (0, 4096, 16384): ["s", "s2"], (0, 4096): ["b"]}
+
+
+def test_m4pro_override_caps_27b():
+    cfg = suite.load_config("m4pro-24gb")
+    big = next(m for m in cfg["model"] if m["label"] == "qwen3.6-27b")
+    assert max(suite.depths_for(cfg, big, cfg["suite"]["depths"])) == 4096

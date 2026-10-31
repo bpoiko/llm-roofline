@@ -235,6 +235,21 @@ def cmd_predict(cfg, machine, host, args) -> int:
     return rc
 
 
+def depths_for(cfg: dict, model: dict, depths: list[int]) -> list[int]:
+    """Depths capped by the model's max_depth and the machine override's [max_depth] table."""
+    caps = [c for c in (model.get("max_depth"), cfg.get("max_depth", {}).get(model["label"])) if c is not None]
+    return [d for d in depths if d <= min(caps)] if caps else depths
+
+
+def by_depths(cfg: dict, models: list[dict], key: str, depths: list[int]) -> dict[tuple, list]:
+    """Group runtime model refs by their effective depth list: one bench invocation per group."""
+    groups: dict[tuple, list] = {}
+    for m in models:
+        refs = m[key] if isinstance(m[key], list) else [m[key]]
+        groups.setdefault(tuple(depths_for(cfg, m, depths)), []).extend(refs)
+    return {d: refs for d, refs in groups.items() if d}
+
+
 def cmd_run(cfg, machine, host, args) -> int:
     s = cfg["suite"]
     reps, depths, num_predict = s["reps"], s["depths"], s["num_predict"]
@@ -243,40 +258,43 @@ def cmd_run(cfg, machine, host, args) -> int:
         reps, depths, num_predict = 1, [0], 128
         out_dir = REPO / "results" / "_smoke"  # kept out of plots and git
     common = ["--machine", machine, "--out-dir", str(out_dir), "--reps", str(reps), "--num-predict", str(num_predict),
-              "--prompts", *s["prompts"], "--depths", *map(str, depths)]
+              "--prompts", *s["prompts"]]
+    models = [m for m in cfg["model"] if not args.model or m["label"] in args.model]
     rc = 0
 
     if enabled(cfg, "ollama", args.runtime):
-        models = [m["ollama"] for m in cfg["model"] if m.get("ollama")]
         if not ollama_up():
             print("skipping ollama: server not reachable")
-        elif models:
+        else:
             extra = ["--cooldown", str(s.get("cooldown_s", 0))]
             if not cfg["ollama"].get("isolate", True):
                 extra.append("--no-isolate")
-            rc |= run([PY, "bench/ollama_bench.py", "--models", *models, *common, *extra])
+            for d, refs in by_depths(cfg, [m for m in models if m.get("ollama")], "ollama", depths).items():
+                rc |= run([PY, "bench/ollama_bench.py", "--models", *refs, *common, "--depths", *map(str, d), *extra])
             ollama_unload_all()
 
     if enabled(cfg, "mlx", args.runtime):
-        models = [m["mlx"] for m in cfg["model"] if m.get("mlx") and mlx_available() and mlx_cached(m["mlx"])]
-        if models:
+        ready = [m for m in models if m.get("mlx") and mlx_available() and mlx_cached(m["mlx"])]
+        if ready:
             ollama_unload_all()
-            rc |= run([PY, "bench/mlx_bench.py", "--models", *models, *common])
+            for d, refs in by_depths(cfg, ready, "mlx", depths).items():
+                rc |= run([PY, "bench/mlx_bench.py", "--models", *refs, *common, "--depths", *map(str, d)])
         else:
             print("skipping mlx: MLX missing or no MLX models downloaded")
 
     if enabled(cfg, "llamacpp", args.runtime):
         lc = cfg["llamacpp"]
-        paths = [p for m in cfg["model"] for g in m.get("gguf", []) if (p := gguf_path(g))]
-        if paths and shutil.which("llama-bench"):
+        ready = [{**m, "gguf": paths} for m in models
+                 if (paths := [p for g in m.get("gguf", []) if (p := gguf_path(g))])]
+        if ready and shutil.which("llama-bench"):
             ollama_unload_all()
-            l_depths = [0] if args.quick else lc["depths"]
             l_reps = 1 if args.quick else lc["reps"]
-            cmd = ["bench/llamacpp_bench.sh", "--machine", machine, "--out-dir", str(out_dir), "-d", ",".join(map(str, l_depths)),
-                   "-p", str(lc["n_prompt"]), "-n", str(lc["n_gen"]), "-r", str(l_reps)]
-            for p in paths:
-                cmd += ["-m", p]
-            rc |= run(cmd)
+            for d, paths in by_depths(cfg, ready, "gguf", [0] if args.quick else lc["depths"]).items():
+                cmd = ["bench/llamacpp_bench.sh", "--machine", machine, "--out-dir", str(out_dir),
+                       "-d", ",".join(map(str, d)), "-p", str(lc["n_prompt"]), "-n", str(lc["n_gen"]), "-r", str(l_reps)]
+                for p in paths:
+                    cmd += ["-m", p]
+                rc |= run(cmd)
         else:
             print("skipping llamacpp: llama-bench missing or no GGUFs downloaded")
 
@@ -306,6 +324,7 @@ def main():
     ap.add_argument("command", choices=COMMANDS)
     ap.add_argument("-r", "--runtime", nargs="+", choices=RUNTIMES, help="limit run/fetch to these runtimes")
     ap.add_argument("--machine", help="results/<machine>/ slug (default: derived from chip and RAM)")
+    ap.add_argument("-m", "--model", nargs="+", help="limit run to these model labels (resume a partial sweep)")
     ap.add_argument("--quick", action="store_true", help="1 rep, depth 0, 128 tokens")
     args = ap.parse_args()
 
