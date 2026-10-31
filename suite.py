@@ -330,7 +330,9 @@ def main():
     ap.add_argument("-r", "--runtime", nargs="+", choices=RUNTIMES, help="limit run/fetch to these runtimes")
     ap.add_argument("--machine", help="results/<machine>/ slug (default: derived from chip and RAM)")
     ap.add_argument("-m", "--model", nargs="+", help="limit run to these model labels (resume a partial sweep)")
-    ap.add_argument("--allow-battery", action="store_true", help="measure even on battery power")
+    ap.add_argument("--allow-battery", action="store_true", help="measure even on battery power (disables all power checks)")
+    ap.add_argument("--min-charger-w", type=int,
+                    help="override machines.json min_charger_w; benches still stop if the battery drains while plugged in")
     ap.add_argument("--quick", action="store_true", help="1 rep, depth 0, 128 tokens")
     args = ap.parse_args()
 
@@ -338,7 +340,8 @@ def main():
     machine = args.machine or env.default_machine_slug(host)
     cfg = load_config(machine)
     if args.command in MEASURING:
-        min_w = json.loads((REPO / "config" / "machines.json").read_text()).get(machine, {}).get("min_charger_w")
+        min_w = args.min_charger_w if args.min_charger_w is not None else \
+            json.loads((REPO / "config" / "machines.json").read_text()).get(machine, {}).get("min_charger_w")
         watts = env.charger_watts() if min_w else None
         if not args.allow_battery:
             if env.on_battery():
@@ -346,7 +349,8 @@ def main():
                          "mid-sweep. --allow-battery to override.")
             if min_w and watts is not None and watts < min_w:
                 sys.exit(f"charger is {watts} W; {machine} needs >= {min_w} W under full GPU load or it drains "
-                         "the battery and throttles. --allow-battery to override.")
+                         "the battery and throttles. --min-charger-w to lower the floor (the battery-drain "
+                         "guard stays on), --allow-battery to disable all power checks.")
         mode = env.energy_mode()
         if mode not in (None, "high power"):
             print(f"warning: macOS Energy Mode is '{mode}'; sustained-load clocks may vary. For comparable "

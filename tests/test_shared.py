@@ -162,3 +162,16 @@ def test_suite_refuses_undersized_charger(monkeypatch):
 def test_energy_mode(monkeypatch, out, mode):
     monkeypatch.setattr(env, "_run", lambda *cmd: out)
     assert env.energy_mode() == mode
+
+
+def test_suite_min_charger_override(monkeypatch):
+    import suite
+    monkeypatch.setattr(env, "on_battery", lambda: False)
+    monkeypatch.setattr(env, "charger_watts", lambda: 60)
+    monkeypatch.setattr(suite, "COMMANDS", {**suite.COMMANDS, "run": lambda *a: 0})
+    monkeypatch.setattr(env, "energy_mode", lambda: "high power")
+    monkeypatch.setattr(suite.shutil, "which", lambda name: None)  # no caffeinate in tests
+    monkeypatch.setattr("sys.argv", ["suite", "run", "--machine", "m4pro-24gb", "--min-charger-w", "60"])
+    with pytest.raises(SystemExit) as e:
+        suite.main()
+    assert e.value.code == 0
