@@ -16,6 +16,7 @@ and drives the scripts in bench/ and tools/.
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -159,7 +160,7 @@ def write_machine_info(machine: str, host: dict):
 def cmd_check(cfg, machine, host, args) -> int:
     ok = True
     print(f"machine: {machine}")
-    for k in ["chip", "gpu_cores", "ram_gb", "gpu_wired_limit_mb", "os_version"]:
+    for k in ["chip", "gpu_cores", "ram_gb", "gpu_wired_limit_mb", "os_version", "power_source"]:
         print(f"  {k}: {host.get(k)}")
     machines = json.loads((REPO / "config" / "machines.json").read_text())
     if machine not in machines:
@@ -259,6 +260,8 @@ def cmd_run(cfg, machine, host, args) -> int:
         out_dir = REPO / "results" / "_smoke"  # kept out of plots and git
     common = ["--machine", machine, "--out-dir", str(out_dir), "--reps", str(reps), "--num-predict", str(num_predict),
               "--prompts", *s["prompts"]]
+    if args.allow_battery:
+        common.append("--allow-battery")
     models = [m for m in cfg["model"] if not args.model or m["label"] in args.model]
     rc = 0
 
@@ -315,6 +318,7 @@ def cmd_all(cfg, machine, host, args) -> int:
     return 0
 
 
+MEASURING = {"membw", "run", "all"}
 COMMANDS = {"check": cmd_check, "fetch": cmd_fetch, "models": cmd_models, "membw": cmd_membw,
             "predict": cmd_predict, "run": cmd_run, "plots": cmd_plots, "all": cmd_all}
 
@@ -325,12 +329,20 @@ def main():
     ap.add_argument("-r", "--runtime", nargs="+", choices=RUNTIMES, help="limit run/fetch to these runtimes")
     ap.add_argument("--machine", help="results/<machine>/ slug (default: derived from chip and RAM)")
     ap.add_argument("-m", "--model", nargs="+", help="limit run to these model labels (resume a partial sweep)")
+    ap.add_argument("--allow-battery", action="store_true", help="measure even on battery power")
     ap.add_argument("--quick", action="store_true", help="1 rep, depth 0, 128 tokens")
     args = ap.parse_args()
 
     host = env.capture({})["host"]
     machine = args.machine or env.default_machine_slug(host)
     cfg = load_config(machine)
+    if args.command in MEASURING:
+        if env.on_battery() and not args.allow_battery:
+            sys.exit("on battery: plug in first. Battery runs throttle, and macOS force-sleeps at low charge "
+                     "mid-sweep. --allow-battery to override.")
+        if shutil.which("caffeinate"):
+            # no idle/system sleep while this process lives (can't stop a dying battery: hence the check above)
+            subprocess.Popen(["caffeinate", "-ims", "-w", str(os.getpid())])
     sys.exit(COMMANDS[args.command](cfg, machine, host, args))
 
 

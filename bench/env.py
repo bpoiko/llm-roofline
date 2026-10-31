@@ -28,6 +28,18 @@ def _int(s: str):
         return None
 
 
+def power_source() -> str | None:
+    """'AC Power' or 'Battery Power' on a Mac; None where there's no pmset.
+    A first sweep ran on battery until macOS forced Low Power Sleep at 1%, which
+    looked like a 9-hour hang and throttled the runs before it."""
+    m = re.search(r"drawing from '([^']+)'", _run("pmset", "-g", "batt"))
+    return m.group(1) if m else None
+
+
+def on_battery() -> bool:
+    return power_source() == "Battery Power"
+
+
 def _darwin() -> dict:
     gpu = {}
     try:
@@ -46,6 +58,7 @@ def _darwin() -> dict:
         "ram_gb": round(mem / 2**30) if mem else None,
         # 0 = macOS default GPU wired-memory limit; raised values change what fits
         "gpu_wired_limit_mb": _int(_sysctl("iogpu.wired_limit_mb")),
+        "power_source": power_source(),
         "os": "macOS",
         "os_version": _run("sw_vers", "-productVersion"),
         "os_build": _run("sw_vers", "-buildVersion"),

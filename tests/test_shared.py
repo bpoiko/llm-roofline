@@ -93,3 +93,22 @@ def test_no_home_paths_in_published_files():
              if f.is_file() and "_smoke" not in f.parts and f.suffix in (".json", ".jsonl", ".csv", ".md", ".toml")
              and home in f.read_text(errors="ignore")]
     assert not leaks, f"absolute home paths in: {leaks} (use env.tilde)"
+
+
+@pytest.mark.parametrize("out,src", [
+    ("Now drawing from 'AC Power'\n -InternalBattery-0\t60%; charging", "AC Power"),
+    ("Now drawing from 'Battery Power'\n -InternalBattery-0\t1%; discharging", "Battery Power"),
+    ("", None),  # no pmset (Linux)
+])
+def test_power_source(monkeypatch, out, src):
+    monkeypatch.setattr(env, "_run", lambda *cmd: out)
+    assert env.power_source() == src
+    assert env.on_battery() == (src == "Battery Power")
+
+
+def test_suite_refuses_to_measure_on_battery(monkeypatch):
+    import suite
+    monkeypatch.setattr(env, "on_battery", lambda: True)
+    monkeypatch.setattr("sys.argv", ["suite", "run"])
+    with pytest.raises(SystemExit, match="on battery"):
+        suite.main()

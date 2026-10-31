@@ -22,6 +22,10 @@ import schema
 REPO = Path(__file__).resolve().parent.parent
 
 
+class OnBattery(Exception):
+    pass
+
+
 def model_dir(ref: str) -> Path:
     """Local dir for a model ref; HF repos resolve to their cached snapshot (named by commit)."""
     local = Path(ref).expanduser()
@@ -50,6 +54,8 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--machine")
     ap.add_argument("--out-dir", type=Path, default=REPO / "results")
+    ap.add_argument("--allow-battery", action="store_true",
+                    help="keep running on battery (throttling and forced sleep make results incomparable)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -96,6 +102,8 @@ def main():
 
             for rep in range(args.reps):
                 for prompt_type, depth in cells:
+                    if not args.allow_battery and env.on_battery():
+                        raise OnBattery()
                     temperature = args.temperature if args.temperature is not None else prompts.PROMPTS[prompt_type]["temperature"]
                     seed = args.seed + rep
                     mx.random.seed(seed)
@@ -154,6 +162,9 @@ def main():
             mx.clear_cache()
     except KeyboardInterrupt:
         print("interrupted; partial results kept", file=sys.stderr)
+    except OnBattery:
+        print("stopped: running on battery (plug in, or --allow-battery); partial results kept", file=sys.stderr)
+        sys.exit(3)
     finally:
         writer.close()
 

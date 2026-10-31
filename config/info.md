@@ -5,7 +5,7 @@ Everything that describes *what* to benchmark and *on what*. Scripts read these;
 | file | edited by | purpose |
 |---|---|---|
 | `suite.toml` | you | Matrix (reps, depths, prompt types, tokens) and the model list, one `[[model]]` per architecture with its Ollama tag, MLX repo and GGUF files. |
-| `suite.<machine>.toml` | you | Optional per-machine override, merged over `suite.toml` (tables merge, arrays replace). `suite.m4pro-24gb.toml` caps the 27B at 4k context; `suite.m5pro-64gb.toml` pushes depth to 64k. |
+| `suite.<machine>.toml` | you | Optional per-machine override, merged over `suite.toml` (tables merge, arrays replace). `suite.m5pro-64gb.toml` pushes depth to 64k. |
 | `machines.json` | you | One entry per machine: nominal bandwidth, GPU memory budget, which runtimes it runs. Keys must equal the `results/<machine>/` slug. |
 | `models.json` | `tools/model_bytes.py` | Generated. Bytes per tensor category, weights read per token, KV and recurrent-state bytes per token, keyed `<runtime>:<model>`. Don't hand-edit; re-run `uv run suite.py models`. |
 

@@ -1,5 +1,4 @@
-"""The run watchdog against a fake Ollama that hangs until the model is unloaded,
-reproducing the 9-hour hang from memory thrash."""
+"""The run watchdog against a fake Ollama that hangs until the model is unloaded."""
 
 import http.server
 import json

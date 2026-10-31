@@ -50,8 +50,12 @@ model with two requests; MLX counts exactly with the local tokenizer. The actual
 - **Stats line timing.** The `speculative decode stats` line is written ~50 ms after the
   HTTP response. The bench tails the log from a byte offset and waits up to `--stats-timeout`.
 - **Prefix cache.** Every Ollama prompt starts with a random nonce.
-- **Hangs under memory pressure.** A 27B at 16k context on the 24 GB M4 Pro swap-thrashed
-  and one request hung for 9 hours; the socket timeout never fired. A watchdog unloads the
+- **Power.** The first sweep ran unplugged. macOS throttled as the battery drained and then
+  force-slept at 1% mid-request (`pmset -g log`: "Low Power Sleep … Charge:1%"), which looked
+  like a 9-hour hang. `suite.py` refuses to measure on battery, each bench re-checks before
+  every run and stops cleanly if the charger is pulled, sweeps hold a `caffeinate`
+  assertion, and env.json records `power_source`. `--allow-battery` overrides.
+- **Hung requests.** A socket timeout doesn't fire on a stalled server. A watchdog unloads the
   model after `--run-timeout` (default 1200 s), which aborts the request. Deeper cells for
   that model are then written as `skipped` error rows rather than attempted.
 - **Nothing else may use the Ollama server during a sweep.** Log lines are matched to requests by order only.

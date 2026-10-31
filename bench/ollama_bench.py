@@ -30,6 +30,10 @@ import prompts
 import schema
 
 REPO = Path(__file__).resolve().parent.parent
+
+
+class OnBattery(Exception):
+    pass
 STATS_RE = re.compile(r'msg="speculative decode stats"(.*)$')
 KV_RE = re.compile(r'(\w+)=("[^"]*"|\S+)')
 STATS_FIELDS = ["iterations", "drafted", "accepted", "acceptance", "avg_draft", "max_draft", "avg_accepted"]
@@ -107,9 +111,8 @@ class RunTimeout(Exception):
 
 def generate(host: str, model: str, prompt: str, options: dict, timeout: float | None = None) -> tuple[dict, float]:
     """With timeout: a watchdog unloads the model if the request runs too long. A socket
-    timeout isn't enough: when the 27B pushed a 24 GB machine into swap thrash, the
-    request hung for 9 hours without tripping one. Unloading aborts the runner and
-    frees the memory, and the request then fails fast."""
+    timeout isn't enough: a stalled server never trips one. Unloading aborts the runner
+    and frees the memory, and the request then fails fast."""
     body = {
         "model": model,
         "prompt": prompt,
@@ -213,6 +216,8 @@ def main():
     ap.add_argument("--no-isolate", dest="isolate", action="store_false",
                     help="keep the runner loaded between runs (MTP draft-depth state then carries over)")
     ap.add_argument("--shuffle", action="store_true", help="randomize (prompt, depth) order within each rep")
+    ap.add_argument("--allow-battery", action="store_true",
+                    help="keep running on battery (throttling and forced sleep make results incomparable)")
     ap.add_argument("--dry-run", action="store_true", help="print the matrix and exit")
     args = ap.parse_args()
 
@@ -293,6 +298,8 @@ def main():
                         "temperature": temperature,
                         "seed": options["seed"],
                     }
+                    if not args.allow_battery and env.on_battery():
+                        raise OnBattery()
                     if depth >= timed_out_at:
                         row["error"] = f"skipped: a run at depth {timed_out_at} timed out"
                         writer.write(row)
@@ -349,6 +356,9 @@ def main():
                         time.sleep(args.cooldown)
     except KeyboardInterrupt:
         print("interrupted; partial results kept", file=sys.stderr)
+    except OnBattery:
+        print("stopped: running on battery (plug in, or --allow-battery); partial results kept", file=sys.stderr)
+        sys.exit(3)
     finally:
         writer.close()
         if outputs:

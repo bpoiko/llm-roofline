@@ -95,7 +95,7 @@ def test_models_grouped_by_effective_depths():
         (0, 4096, 16384): ["s", "s2"], (0, 4096): ["b"]}
 
 
-def test_m4pro_override_caps_27b():
+def test_m4pro_runs_27b_at_every_depth():
     cfg = suite.load_config("m4pro-24gb")
     big = next(m for m in cfg["model"] if m["label"] == "qwen3.6-27b")
-    assert max(suite.depths_for(cfg, big, cfg["suite"]["depths"])) == 4096
+    assert suite.depths_for(cfg, big, cfg["suite"]["depths"]) == cfg["suite"]["depths"]
