@@ -22,7 +22,7 @@ import schema
 REPO = Path(__file__).resolve().parent.parent
 
 
-class OnBattery(Exception):
+class PowerLimited(Exception):
     pass
 
 
@@ -85,6 +85,7 @@ def main():
     print(f"writing {out / run_id}.csv ({total} runs)", file=sys.stderr)
 
     done = 0
+    start_pct = env.battery_pct()
     try:
         for model_ref in args.models:
             print(f"[{model_ref}] loading", file=sys.stderr)
@@ -102,11 +103,12 @@ def main():
 
             for rep in range(args.reps):
                 for prompt_type, depth in cells:
-                    if not args.allow_battery and env.on_battery():
-                        raise OnBattery()
+                    if not args.allow_battery and (problem := env.power_problem(start_pct)):
+                        raise PowerLimited(problem)
                     temperature = args.temperature if args.temperature is not None else prompts.PROMPTS[prompt_type]["temperature"]
                     seed = args.seed + rep
                     mx.random.seed(seed)
+                    mx.reset_peak_memory()  # mlx-lm reports a process-wide peak; make it per run
                     text = prompts.build(prompt_type, round(depth / tpw), rep, nonce=f"{rep:04d}")
                     row = {
                         "run_id": run_id,
@@ -147,6 +149,7 @@ def main():
                         decode_tps=round(last.generation_tps, 2),
                         wall_s=round(wall, 3),
                         done_reason=last.finish_reason or "",
+                        battery_pct=env.battery_pct() if start_pct is not None else "",
                         peak_mem_gb=round(last.peak_memory, 2),
                     )
                     writer.write(row)
@@ -162,8 +165,8 @@ def main():
             mx.clear_cache()
     except KeyboardInterrupt:
         print("interrupted; partial results kept", file=sys.stderr)
-    except OnBattery:
-        print("stopped: running on battery (plug in, or --allow-battery); partial results kept", file=sys.stderr)
+    except PowerLimited as e:
+        print(f"stopped: {e} (--allow-battery to override); partial results kept", file=sys.stderr)
         sys.exit(3)
     finally:
         writer.close()

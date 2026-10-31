@@ -32,7 +32,7 @@ import schema
 REPO = Path(__file__).resolve().parent.parent
 
 
-class OnBattery(Exception):
+class PowerLimited(Exception):
     pass
 STATS_RE = re.compile(r'msg="speculative decode stats"(.*)$')
 KV_RE = re.compile(r'(\w+)=("[^"]*"|\S+)')
@@ -257,6 +257,7 @@ def main():
     log = LogTail(args.server_log)
     rng = random.Random(args.seed)
     done = 0
+    start_pct = env.battery_pct()
     try:
         for model in args.models:
             info = tags.get(model) or tags[f"{model}:latest"]
@@ -298,8 +299,8 @@ def main():
                         "temperature": temperature,
                         "seed": options["seed"],
                     }
-                    if not args.allow_battery and env.on_battery():
-                        raise OnBattery()
+                    if not args.allow_battery and (problem := env.power_problem(start_pct)):
+                        raise PowerLimited(problem)
                     if depth >= timed_out_at:
                         row["error"] = f"skipped: a run at depth {timed_out_at} timed out"
                         writer.write(row)
@@ -333,6 +334,7 @@ def main():
                         wall_s=round(wall, 3),
                         load_s=round(load_s if load_s is not None else resp.get("load_duration", 0) / 1e9, 3),
                         done_reason=resp.get("done_reason", ""),
+                        battery_pct=env.battery_pct() if start_pct is not None else "",
                     )
                     for k in STATS_FIELDS:
                         row[f"spec_{k}"] = stats.get(k, "")
@@ -356,8 +358,8 @@ def main():
                         time.sleep(args.cooldown)
     except KeyboardInterrupt:
         print("interrupted; partial results kept", file=sys.stderr)
-    except OnBattery:
-        print("stopped: running on battery (plug in, or --allow-battery); partial results kept", file=sys.stderr)
+    except PowerLimited as e:
+        print(f"stopped: {e} (--allow-battery to override); partial results kept", file=sys.stderr)
         sys.exit(3)
     finally:
         writer.close()

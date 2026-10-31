@@ -40,6 +40,29 @@ def on_battery() -> bool:
     return power_source() == "Battery Power"
 
 
+def battery_pct() -> int | None:
+    m = re.search(r"(\d+)%;", _run("pmset", "-g", "batt"))
+    return int(m.group(1)) if m else None
+
+
+def charger_watts() -> int | None:
+    """Connected charger's rating. "AC Power" alone isn't enough: on a 30 W charger an
+    M4 Pro under GPU load drained 60% -> 9% while plugged in and throttled hard."""
+    m = re.search(r"Wattage \(W\): (\d+)", _run("system_profiler", "SPPowerDataType"))
+    return int(m.group(1)) if m else None
+
+
+def power_problem(start_pct: int | None, max_drop: int = 10) -> str | None:
+    """Why measurements would be power-limited right now, or None. A battery falling while
+    plugged in means the charger can't keep up with the load, whatever its rating."""
+    if on_battery():
+        return "running on battery"
+    pct = battery_pct()
+    if start_pct is not None and pct is not None and start_pct - pct >= max_drop:
+        return f"battery fell {start_pct}% -> {pct}% while plugged in: the charger can't keep up with the load"
+    return None
+
+
 def _darwin() -> dict:
     gpu = {}
     try:
@@ -59,6 +82,8 @@ def _darwin() -> dict:
         # 0 = macOS default GPU wired-memory limit; raised values change what fits
         "gpu_wired_limit_mb": _int(_sysctl("iogpu.wired_limit_mb")),
         "power_source": power_source(),
+        "charger_w": charger_watts(),
+        "battery_pct": battery_pct(),
         "os": "macOS",
         "os_version": _run("sw_vers", "-productVersion"),
         "os_build": _run("sw_vers", "-buildVersion"),

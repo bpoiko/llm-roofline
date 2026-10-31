@@ -54,9 +54,15 @@ model with two requests; MLX counts exactly with the local tokenizer. The actual
 - **Prefix cache.** Every Ollama prompt starts with a random nonce.
 - **Power.** The first sweep ran unplugged. macOS throttled as the battery drained and then
   force-slept at 1% mid-request (`pmset -g log`: "Low Power Sleep … Charge:1%"), which looked
-  like a 9-hour hang. `suite.py` refuses to measure on battery, each bench re-checks before
-  every run and stops cleanly if the charger is pulled, sweeps hold a `caffeinate`
-  assertion, and env.json records `power_source`. `--allow-battery` overrides.
+  like a 9-hour hang. The second ran "plugged in" to a **30 W** charger. Under GPU load the
+  M4 Pro drained 60% → 9% anyway and throttled about 40% (MLX 9B decode 50 → 30 t/s,
+  recovering after a few idle minutes). So now:
+  - `suite.py` refuses to measure on battery, or on a charger below the machine's
+    `min_charger_w` (70 W for the MacBooks, in `config/machines.json`).
+  - each bench re-checks before every run and stops cleanly if power drops to battery
+    *or* the battery falls 10 points while plugged in;
+  - every row records `battery_pct`, env.json records `power_source`, `charger_w` and `battery_pct`;
+  - sweeps hold a `caffeinate` assertion. `--allow-battery` overrides all of it.
 - **Hung requests.** A socket timeout doesn't fire on a stalled server. A watchdog unloads the
   model after `--run-timeout` (default 1200 s), which aborts the request. Deeper cells for
   that model are then written as `skipped` error rows rather than attempted.

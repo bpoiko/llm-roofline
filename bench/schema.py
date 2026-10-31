@@ -34,6 +34,7 @@ COLUMNS = [
     "load_s",
     "done_reason",       # stop | length
     "peak_mem_gb",       # runtime-reported peak memory, when available
+    "battery_pct",       # laptop charge after the run; falling while plugged in = power-limited
     # speculative decoding (empty when the runtime does not speculate)
     "spec_iterations",   # target-model forward passes during decode
     "spec_drafted",

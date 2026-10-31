@@ -5,6 +5,7 @@
     "nominal_bw_gbs": 273,
     "mem_gb": 24,
     "gpu_mem_budget_gb": 21.4,
+    "min_charger_w": 70,
     "runtimes": ["ollama", "mlx", "llamacpp"],
     "status": "active"
   },
@@ -14,6 +15,7 @@
     "nominal_bw_gbs": 307,
     "mem_gb": 64,
     "gpu_mem_budget_gb": 48,
+    "min_charger_w": 70,
     "runtimes": ["ollama", "mlx", "llamacpp"],
     "status": "pending"
   },
@@ -28,6 +30,7 @@
   },
   "_notes": {
     "gpu_mem_budget_gb": "Apple: iogpu.wired_limit_mb if raised (m4pro-24gb: 20480 MB = 21.4 GB), else macOS default of ~2/3 of RAM at 24 GB and ~3/4 at 64 GB. env.json records the value in effect. NVIDIA: VRAM minus display/driver overhead.",
+    "min_charger_w": "suite.py refuses to measure below this. A 30 W charger let the M4 Pro drain 60% -> 9% under load while 'plugged in' and throttle ~40%. Apple ships 70 W+ with Pro laptops.",
     "assumed_efficiency": "Fraction of nominal used when results/<machine>/membw.json is missing. M4 Pro measured 260/273 = 0.95 on the MLX read kernel.",
     "machine keys": "Must match the results/<machine>/ slug, i.e. bench/env.py default_machine_slug() or the --machine flag."
   },

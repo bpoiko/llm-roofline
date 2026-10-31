@@ -119,3 +119,35 @@ def test_filler_is_disjoint_from_random_task_vocab():
     assert not set(words) & set(prompts.VOCAB)
     assert len(set(words)) > 1000  # varied, not a short repeating cycle
     assert prompts.filler(50, seed=3) == prompts.filler(50, seed=3)
+
+
+def test_charger_watts_and_battery_pct(monkeypatch):
+    outputs = {
+        "system_profiler": "    AC Charger Information:\n      Connected: Yes\n      Wattage (W): 30\n",
+        "pmset": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=1)\t9%; charging; 6:31 remaining",
+    }
+    monkeypatch.setattr(env, "_run", lambda *cmd: outputs[cmd[0]])
+    assert env.charger_watts() == 30
+    assert env.battery_pct() == 9
+
+
+@pytest.mark.parametrize("source,start,now,problem", [
+    ("AC Power", 60, 58, None),            # small wobble is fine
+    ("AC Power", 60, 50, "can't keep up"),  # draining while plugged in: undersized charger
+    ("Battery Power", 60, 60, "on battery"),
+    ("AC Power", None, None, None),        # desktop: no battery
+])
+def test_power_problem(monkeypatch, source, start, now, problem):
+    monkeypatch.setattr(env, "power_source", lambda: source)
+    monkeypatch.setattr(env, "battery_pct", lambda: now)
+    result = env.power_problem(start)
+    assert (result is None) if problem is None else (problem in result)
+
+
+def test_suite_refuses_undersized_charger(monkeypatch):
+    import suite
+    monkeypatch.setattr(env, "on_battery", lambda: False)
+    monkeypatch.setattr(env, "charger_watts", lambda: 30)
+    monkeypatch.setattr("sys.argv", ["suite", "run", "--machine", "m4pro-24gb"])
+    with pytest.raises(SystemExit, match="charger is 30 W"):
+        suite.main()

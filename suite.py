@@ -337,9 +337,15 @@ def main():
     machine = args.machine or env.default_machine_slug(host)
     cfg = load_config(machine)
     if args.command in MEASURING:
-        if env.on_battery() and not args.allow_battery:
-            sys.exit("on battery: plug in first. Battery runs throttle, and macOS force-sleeps at low charge "
-                     "mid-sweep. --allow-battery to override.")
+        min_w = json.loads((REPO / "config" / "machines.json").read_text()).get(machine, {}).get("min_charger_w")
+        watts = env.charger_watts() if min_w else None
+        if not args.allow_battery:
+            if env.on_battery():
+                sys.exit("on battery: plug in first. Battery runs throttle, and macOS force-sleeps at low charge "
+                         "mid-sweep. --allow-battery to override.")
+            if min_w and watts is not None and watts < min_w:
+                sys.exit(f"charger is {watts} W; {machine} needs >= {min_w} W under full GPU load or it drains "
+                         "the battery and throttles. --allow-battery to override.")
         if shutil.which("caffeinate"):
             # no idle/system sleep while this process lives (can't stop a dying battery: hence the check above)
             subprocess.Popen(["caffeinate", "-ims", "-w", str(os.getpid())])
