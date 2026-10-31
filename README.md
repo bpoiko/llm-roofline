@@ -15,6 +15,9 @@ bytes read per token =  weights read per step + recurrent state + KV cache × de
 | MacBook Pro M5 Pro, 64 GB | `m5pro-64gb` | 307 GB/s | arrives 2026-11-20 |
 | Desktop RTX 5070 Ti, 16 GB | `rtx5070ti-16gb` | 896 GB/s | later |
 
+New to rooflines? [`learning.md`](learning.md) walks through arithmetic intensity, the ridge
+point, and why batch-1 decode is memory bound, using this machine's numbers.
+
 ## Quick start
 ```sh
 uv sync --extra mlx            # Python env; drop --extra mlx on non-Apple machines
