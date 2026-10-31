@@ -1,0 +1,93 @@
+"""Host environment capture for env.json.
+
+Only reads an allowlist of fields. Never records serial numbers, hardware UUIDs,
+provisioning IDs, hostnames, or usernames."""
+
+import json
+import platform
+import re
+import subprocess
+
+
+def _run(*cmd: str) -> str:
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _sysctl(name: str) -> str:
+    return _run("sysctl", "-n", name)
+
+
+def _int(s: str):
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
+def _darwin() -> dict:
+    gpu = {}
+    try:
+        displays = json.loads(_run("system_profiler", "SPDisplaysDataType", "-json"))["SPDisplaysDataType"]
+        gpu = displays[0] if displays else {}
+    except (ValueError, KeyError):
+        pass
+    mem = _int(_sysctl("hw.memsize"))
+    return {
+        "chip": _sysctl("machdep.cpu.brand_string"),
+        "cpu_cores_total": _int(_sysctl("hw.physicalcpu")),
+        "cpu_cores_performance": _int(_sysctl("hw.perflevel0.physicalcpu")),
+        "cpu_cores_efficiency": _int(_sysctl("hw.perflevel1.physicalcpu")),
+        "gpu_name": gpu.get("sppci_model"),
+        "gpu_cores": _int(gpu.get("sppci_cores")),
+        "ram_gb": round(mem / 2**30) if mem else None,
+        # 0 = macOS default GPU wired-memory limit; raised values change what fits
+        "gpu_wired_limit_mb": _int(_sysctl("iogpu.wired_limit_mb")),
+        "os": "macOS",
+        "os_version": _run("sw_vers", "-productVersion"),
+        "os_build": _run("sw_vers", "-buildVersion"),
+    }
+
+
+def _linux() -> dict:
+    info = {"os": "Linux", "os_version": platform.release()}
+    try:
+        with open("/proc/meminfo") as f:
+            kb = int(re.search(r"MemTotal:\s+(\d+)", f.read()).group(1))
+        info["ram_gb"] = round(kb / 2**20)
+    except (OSError, AttributeError):
+        pass
+    try:
+        with open("/proc/cpuinfo") as f:
+            m = re.search(r"model name\s*:\s*(.+)", f.read())
+        info["chip"] = m.group(1).strip() if m else None
+    except OSError:
+        pass
+    # name/memory/driver only; deliberately not uuid or serial
+    smi = _run("nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader,nounits")
+    if smi:
+        name, mem_mib, driver = [s.strip() for s in smi.splitlines()[0].split(",")]
+        info.update(gpu_name=name, gpu_mem_gb=round(int(mem_mib) / 1024), nvidia_driver=driver)
+    return info
+
+
+def capture(runtime: dict) -> dict:
+    """runtime: runtime-specific fields, e.g. {"name": "ollama", "version": ..., "commit": ...}."""
+    system = platform.system()
+    host = _darwin() if system == "Darwin" else _linux() if system == "Linux" else {"os": system}
+    host["arch"] = platform.machine()
+    host["python"] = platform.python_version()
+    return {"host": host, "runtime": runtime}
+
+
+def default_machine_slug(host: dict) -> str:
+    """apple-silicon: chip + RAM (m4pro-24gb); discrete GPU: GPU + VRAM (rtx5070ti-16gb)."""
+    if host.get("gpu_mem_gb"):
+        name, mem = host.get("gpu_name") or "gpu", host["gpu_mem_gb"]
+    else:
+        name, mem = host.get("chip") or "unknown", host.get("ram_gb")
+    name = re.sub(r"^apple\s+|\(.*?\)|nvidia\s+|geforce\s+", "", name.lower())
+    slug = re.sub(r"[^a-z0-9]+", "", name)
+    return f"{slug}-{mem}gb" if mem else slug
