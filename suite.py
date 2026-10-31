@@ -1,0 +1,319 @@
+#!/usr/bin/env python3
+"""Benchmark suite orchestrator. Reads config/suite.toml (+ config/suite.<machine>.toml)
+and drives the scripts in bench/ and tools/.
+
+  uv run suite.py check            what this machine has: runtimes, models, memory
+  uv run suite.py fetch            download/pull every configured model that is missing
+  uv run suite.py models           record bytes/token for every model -> config/models.json
+  uv run suite.py membw            measure GPU memory bandwidth -> results/<machine>/membw.json
+  uv run suite.py predict          roofline ceilings for all machines -> results/*/predictions.csv
+  uv run suite.py run [-r ollama]  benchmark sweeps -> results/<machine>/<run_id>.csv
+  uv run suite.py plots            figures + summary -> results/plots/
+  uv run suite.py all              check, models, membw, predict, run, plots
+
+  --quick   1 rep, depth 0, 128 tokens into results/_smoke/: a smoke test of the pipeline
+"""
+
+import argparse
+import json
+import shutil
+import subprocess
+import sys
+import tomllib
+import urllib.request
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent
+sys.path.insert(0, str(REPO / "bench"))
+import env  # noqa: E402
+
+PY = sys.executable
+OLLAMA = "http://127.0.0.1:11434"
+RUNTIMES = ["ollama", "mlx", "llamacpp"]
+
+
+# ---- config ----------------------------------------------------------------
+
+def merge(base: dict, over: dict) -> dict:
+    out = dict(base)
+    for k, v in over.items():
+        out[k] = merge(out[k], v) if isinstance(v, dict) and isinstance(out.get(k), dict) else v
+    return out
+
+
+def load_config(machine: str) -> dict:
+    cfg = tomllib.loads((REPO / "config" / "suite.toml").read_text())
+    override = REPO / "config" / f"suite.{machine}.toml"
+    if override.exists():
+        cfg = merge(cfg, tomllib.loads(override.read_text()))
+        print(f"config: suite.toml + {override.name}")
+    return cfg
+
+
+# ---- helpers ---------------------------------------------------------------
+
+def run(cmd: list[str]) -> int:
+    print("$ " + " ".join(cmd), flush=True)
+    return subprocess.run(cmd, cwd=REPO).returncode
+
+
+def ollama_api(path: str, body: dict | None = None):
+    req = urllib.request.Request(OLLAMA + path, data=json.dumps(body).encode() if body else None,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return json.loads(r.read())
+
+
+def ollama_up() -> str | None:
+    try:
+        return ollama_api("/api/version")["version"]
+    except Exception:
+        return None
+
+
+def ollama_unload_all():
+    """Free unified memory before MLX/llama.cpp runs."""
+    if not ollama_up():
+        return
+    for m in ollama_api("/api/ps")["models"]:
+        ollama_api("/api/generate", {"model": m["name"], "keep_alive": 0})
+        print(f"unloaded ollama model {m['name']}")
+
+
+def ollama_has(tag: str) -> bool:
+    names = {m["name"] for m in ollama_api("/api/tags")["models"]}
+    return tag in names or f"{tag}:latest" in names
+
+
+def mlx_available() -> bool:
+    try:
+        import mlx.core  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+def mlx_cached(repo: str) -> bool:
+    if Path(repo).expanduser().is_dir():
+        return True
+    from huggingface_hub import try_to_load_from_cache
+    hit = try_to_load_from_cache(repo, "config.json")
+    return isinstance(hit, str) and any(Path(hit).parent.glob("*.safetensors"))
+
+
+def gguf_path(ref: str, download: bool = False) -> str | None:
+    """'<org>/<repo>/<file>.gguf' -> HF cache path; local paths pass through."""
+    if Path(ref).expanduser().exists():
+        return str(Path(ref).expanduser())
+    org, repo, fname = ref.split("/", 2)
+    from huggingface_hub import hf_hub_download, try_to_load_from_cache
+    hit = try_to_load_from_cache(f"{org}/{repo}", fname)
+    if isinstance(hit, str):
+        return hit
+    return hf_hub_download(f"{org}/{repo}", fname) if download else None
+
+
+def enabled(cfg: dict, runtime: str, only: list[str] | None) -> bool:
+    return cfg.get(runtime, {}).get("enabled", True) and (not only or runtime in only)
+
+
+# ---- results/<machine>/info.md --------------------------------------------
+
+def write_machine_info(machine: str, host: dict):
+    """Regenerate the header and run index; keep everything under '## Notes'."""
+    d = REPO / "results" / machine
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / "info.md"
+    notes = "## Notes\n\nFree-form observations for this machine. Everything below this heading is preserved.\n"
+    if path.exists() and "## Notes" in (text := path.read_text()):
+        notes = text[text.index("## Notes"):]
+    spec = json.loads((REPO / "config" / "machines.json").read_text()).get(machine, {})
+    membw = json.loads((d / "membw.json").read_text()) if (d / "membw.json").exists() else None
+
+    lines = [f"# {machine}", "", "_Generated by `suite.py`; edit only the Notes section._", "",
+             f"{spec.get('description', '')}", "",
+             "| field | value |", "|---|---|"]
+    for k in ["chip", "cpu_cores_performance", "cpu_cores_efficiency", "gpu_name", "gpu_cores", "ram_gb",
+              "gpu_wired_limit_mb", "os", "os_version", "os_build"]:
+        if host.get(k) is not None:
+            lines.append(f"| {k} | {host[k]} |")
+    if spec:
+        lines.append(f"| nominal bandwidth | {spec['nominal_bw_gbs']} GB/s |")
+        lines.append(f"| GPU memory budget | {spec['gpu_mem_budget_gb']} GB |")
+    if membw:
+        k = membw["kernels"]
+        lines.append(f"| measured bandwidth | {membw['bandwidth_gbs']} GB/s read "
+                     f"(copy {k['copy']['best_gbs']}, triad {k['triad']['best_gbs']}) |")
+    lines += ["", "## Runs", "", "| run_id | runtime | rows |", "|---|---|---|"]
+    for csv_path in sorted(d.glob("*.csv")):
+        if csv_path.name == "predictions.csv":
+            continue
+        rows = max(0, sum(1 for _ in open(csv_path)) - 1)
+        lines.append(f"| `{csv_path.stem}` | {csv_path.stem.rsplit('_', 1)[-1]} | {rows} |")
+    lines += [""]
+    path.write_text("\n".join(lines) + "\n" + notes)
+
+
+# ---- commands --------------------------------------------------------------
+
+def cmd_check(cfg, machine, host, args) -> int:
+    ok = True
+    print(f"machine: {machine}")
+    for k in ["chip", "gpu_cores", "ram_gb", "gpu_wired_limit_mb", "os_version"]:
+        print(f"  {k}: {host.get(k)}")
+    machines = json.loads((REPO / "config" / "machines.json").read_text())
+    if machine not in machines:
+        print(f"  ! {machine} not in config/machines.json: add it (nominal_bw_gbs, gpu_mem_budget_gb)")
+        ok = False
+    print("runtimes:")
+    v = ollama_up()
+    print(f"  ollama: {v or 'not reachable at ' + OLLAMA}")
+    print(f"  mlx: {'ok' if mlx_available() else 'missing (uv sync --extra mlx)'}")
+    print(f"  llama-bench: {shutil.which('llama-bench') or 'missing (brew install llama.cpp)'}")
+    print("models:")
+    for m in cfg["model"]:
+        if m.get("ollama") and v:
+            print(f"  [{'x' if ollama_has(m['ollama']) else ' '}] ollama {m['ollama']}")
+        if m.get("mlx") and mlx_available():
+            print(f"  [{'x' if mlx_cached(m['mlx']) else ' '}] mlx    {m['mlx']}")
+        for g in m.get("gguf", []):
+            print(f"  [{'x' if gguf_path(g) else ' '}] gguf   {g}")
+    print("missing models: uv run suite.py fetch")
+    if machine in machines:
+        write_machine_info(machine, host)
+    return 0 if ok else 1
+
+
+def cmd_fetch(cfg, machine, host, args) -> int:
+    rc = 0
+    for m in cfg["model"]:
+        if m.get("ollama") and enabled(cfg, "ollama", args.runtime) and ollama_up() and not ollama_has(m["ollama"]):
+            rc |= run(["ollama", "pull", m["ollama"]])
+        if m.get("mlx") and enabled(cfg, "mlx", args.runtime) and mlx_available() and not mlx_cached(m["mlx"]):
+            from huggingface_hub import snapshot_download
+            print(f"downloading {m['mlx']}")
+            snapshot_download(m["mlx"], allow_patterns=["*.json", "*.safetensors", "*.jinja", "*.txt", "*.model"])
+        if enabled(cfg, "llamacpp", args.runtime):
+            for g in m.get("gguf", []):
+                if not gguf_path(g):
+                    print(f"downloading {g}")
+                    gguf_path(g, download=True)
+    return rc
+
+
+def cmd_models(cfg, machine, host, args) -> int:
+    rc = 0
+    for m in cfg["model"]:
+        label = ["--label", m["label"]]
+        if m.get("ollama") and ollama_up() and ollama_has(m["ollama"]):
+            rc |= run([PY, "tools/model_bytes.py", f"ollama:{m['ollama']}", *label])
+        if m.get("mlx") and mlx_available() and mlx_cached(m["mlx"]):
+            rc |= run([PY, "tools/model_bytes.py", f"mlx:{m['mlx']}", *label])
+        for g in m.get("gguf", []):
+            if p := gguf_path(g):
+                hf = ["--hf-config", m["hf_config"]] if m.get("hf_config") else []
+                rc |= run([PY, "tools/model_bytes.py", f"gguf:{p}", *label, *hf])
+    return rc
+
+
+def cmd_membw(cfg, machine, host, args) -> int:
+    if not mlx_available():
+        print("skipping membw: MLX not available (see bench/membw.py for NVIDIA)")
+        return 0
+    ollama_unload_all()
+    rc = run([PY, "bench/membw.py", "--machine", machine])
+    write_machine_info(machine, host)
+    return rc
+
+
+def cmd_predict(cfg, machine, host, args) -> int:
+    rc = run([PY, "predict.py", "--depths", *map(str, cfg["suite"]["predict_depths"])])
+    # machines not in hand yet get a spec-only info.md next to their predictions
+    for name in json.loads((REPO / "config" / "machines.json").read_text()):
+        if not name.startswith("_") and not (REPO / "results" / name / "info.md").exists():
+            write_machine_info(name, host if name == machine else {})
+    return rc
+
+
+def cmd_run(cfg, machine, host, args) -> int:
+    s = cfg["suite"]
+    reps, depths, num_predict = s["reps"], s["depths"], s["num_predict"]
+    out_dir = REPO / "results"
+    if args.quick:
+        reps, depths, num_predict = 1, [0], 128
+        out_dir = REPO / "results" / "_smoke"  # kept out of plots and git
+    common = ["--machine", machine, "--out-dir", str(out_dir), "--reps", str(reps), "--num-predict", str(num_predict),
+              "--prompts", *s["prompts"], "--depths", *map(str, depths)]
+    rc = 0
+
+    if enabled(cfg, "ollama", args.runtime):
+        models = [m["ollama"] for m in cfg["model"] if m.get("ollama")]
+        if not ollama_up():
+            print("skipping ollama: server not reachable")
+        elif models:
+            extra = ["--cooldown", str(s.get("cooldown_s", 0))]
+            if not cfg["ollama"].get("isolate", True):
+                extra.append("--no-isolate")
+            rc |= run([PY, "bench/ollama_bench.py", "--models", *models, *common, *extra])
+            ollama_unload_all()
+
+    if enabled(cfg, "mlx", args.runtime):
+        models = [m["mlx"] for m in cfg["model"] if m.get("mlx") and mlx_available() and mlx_cached(m["mlx"])]
+        if models:
+            ollama_unload_all()
+            rc |= run([PY, "bench/mlx_bench.py", "--models", *models, *common])
+        else:
+            print("skipping mlx: MLX missing or no MLX models downloaded")
+
+    if enabled(cfg, "llamacpp", args.runtime):
+        lc = cfg["llamacpp"]
+        paths = [p for m in cfg["model"] for g in m.get("gguf", []) if (p := gguf_path(g))]
+        if paths and shutil.which("llama-bench"):
+            ollama_unload_all()
+            l_depths = [0] if args.quick else lc["depths"]
+            l_reps = 1 if args.quick else lc["reps"]
+            cmd = ["bench/llamacpp_bench.sh", "--machine", machine, "--out-dir", str(out_dir), "-d", ",".join(map(str, l_depths)),
+                   "-p", str(lc["n_prompt"]), "-n", str(lc["n_gen"]), "-r", str(l_reps)]
+            for p in paths:
+                cmd += ["-m", p]
+            rc |= run(cmd)
+        else:
+            print("skipping llamacpp: llama-bench missing or no GGUFs downloaded")
+
+    if not args.quick:
+        write_machine_info(machine, host)
+    return rc
+
+
+def cmd_plots(cfg, machine, host, args) -> int:
+    return run([PY, "plots.py"])
+
+
+def cmd_all(cfg, machine, host, args) -> int:
+    for step in (cmd_check, cmd_models, cmd_membw, cmd_predict, cmd_run, cmd_plots):
+        if step(cfg, machine, host, args) and step is cmd_check:
+            print("check failed; fix the above (or run steps individually)")
+            return 1
+    return 0
+
+
+COMMANDS = {"check": cmd_check, "fetch": cmd_fetch, "models": cmd_models, "membw": cmd_membw,
+            "predict": cmd_predict, "run": cmd_run, "plots": cmd_plots, "all": cmd_all}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", choices=COMMANDS)
+    ap.add_argument("-r", "--runtime", nargs="+", choices=RUNTIMES, help="limit run/fetch to these runtimes")
+    ap.add_argument("--machine", help="results/<machine>/ slug (default: derived from chip and RAM)")
+    ap.add_argument("--quick", action="store_true", help="1 rep, depth 0, 128 tokens")
+    args = ap.parse_args()
+
+    host = env.capture({})["host"]
+    machine = args.machine or env.default_machine_slug(host)
+    cfg = load_config(machine)
+    sys.exit(COMMANDS[args.command](cfg, machine, host, args))
+
+
+if __name__ == "__main__":
+    main()

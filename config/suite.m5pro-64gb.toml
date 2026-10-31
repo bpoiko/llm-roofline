@@ -1,0 +1,9 @@
+# Overrides for the 64 GB M5 Pro, merged over suite.toml.
+# 64 GB fits the 27B with long contexts; push depth further than on the 24 GB M4 Pro.
+# Arrays replace (not append), so restate the full list.
+
+[suite]
+depths = [0, 4096, 16384, 65536]
+
+[llamacpp]
+depths = [0, 4096, 16384, 65536]
