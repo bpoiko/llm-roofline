@@ -94,7 +94,7 @@ def main():
             quant = f"{q['bits']}bit" if "bits" in q else ""
             digest = "" if Path(model_ref).expanduser().is_dir() else mdir.name[:12]
 
-            sample = prompts.random_words(2000, seed=0)
+            sample = prompts.filler(2000, seed=0)
             tpw = len(tokenizer.encode(sample)) / 2000
             print(f"[{model_ref}] {tpw:.3f} tokens/filler word; warmup", file=sys.stderr)
             for _ in stream_generate(model, tokenizer, chat(tokenizer, "Say hi."), max_tokens=8):

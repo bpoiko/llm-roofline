@@ -112,3 +112,10 @@ def test_suite_refuses_to_measure_on_battery(monkeypatch):
     monkeypatch.setattr("sys.argv", ["suite", "run"])
     with pytest.raises(SystemExit, match="on battery"):
         suite.main()
+
+
+def test_filler_is_disjoint_from_random_task_vocab():
+    words = prompts.filler(5000, seed=3).split()
+    assert not set(words) & set(prompts.VOCAB)
+    assert len(set(words)) > 1000  # varied, not a short repeating cycle
+    assert prompts.filler(50, seed=3) == prompts.filler(50, seed=3)

@@ -12,7 +12,7 @@ Runners (one per runtime) and the shared modules they all use. Each runner write
 | `llamacpp_to_csv.py` | Converts llama-bench JSONL to the shared schema; keeps the raw JSONL next to the CSV. |
 | `membw.py` | GPU memory-bandwidth probe (MLX read/copy/triad), giving `results/<machine>/membw.json`. The *read* kernel is the roofline BW. |
 | `schema.py` | **The CSV schema**: one column list for all runtimes. Add columns here, at the end of a group. |
-| `prompts.py` | Prompt types and the random-word context filler, shared so every runtime sees identical text. |
+| `prompts.py` | Prompt types and the non-word context filler, shared so every runtime sees identical text. |
 | `env.py` | env.json capture from a fixed list of safe fields (no serials, UUIDs, hostnames), plus the machine slug. |
 
 ## CSV schema (bench/schema.py)
@@ -35,7 +35,9 @@ Columns that don't apply to a runtime are left empty.
 | `random` | unrelated words, built to defeat the draft head | 1 (greedy collapses into loops the drafter then predicts) |
 | `synthetic` | llama-bench only: random token IDs, no text | n/a |
 
-Depth = random-word filler placed before the instruction. Ollama calibrates tokens/word per
+Depth = pronounceable non-word filler ("tavoki remuzo …") placed before the instruction. It is
+deliberately not English: English filler let `random` copy from context (MTP acceptance
+0.9 at 16k). Ollama calibrates tokens/word per
 model with two requests; MLX counts exactly with the local tokenizer. The actual
 `prompt_tokens` is always recorded.
 

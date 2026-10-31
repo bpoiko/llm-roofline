@@ -32,8 +32,7 @@ PROMPTS = {
     },
 }
 
-# Common English words for filler and random-word seeds. Filler is random words rather
-# than repeated text so the depth KV cache isn't trivially compressible by anything clever.
+# Common English words: seeds for the `random` prompt type.
 VOCAB = """
 able acid angle apple arch army art attack autumn baby back bag balance band base basin
 bath bean bear beat bell berry bird birth bit blade blood blue board boat body bone book
@@ -68,12 +67,33 @@ def random_words(n: int, seed: int) -> str:
     return " ".join(rng.choice(VOCAB) for _ in range(n))
 
 
+ONSETS = "b d f g k l m n p r s t v z".split()
+VOWELS = "a e i o u".split()
+
+
+def filler(n: int, seed: int) -> str:
+    """Context-depth filler: n pronounceable non-words ("tavoki remuzo ...").
+
+    Not English words on purpose. Filler drawn from VOCAB let the `random` task copy
+    from its own context: at 16k depth it reached 0.88-0.93 MTP acceptance (vs
+    0.26-0.57) with as few as 278 unique words in 504. Random rather than repeated
+    text so the KV cache isn't trivially predictable either."""
+    rng = random.Random(seed)
+    vocab = set(VOCAB)
+    words = []
+    while len(words) < n:
+        w = "".join(rng.choice(ONSETS) + rng.choice(VOWELS) for _ in range(rng.randint(2, 3)))
+        if w not in vocab:  # CV syllables occasionally spell one ("rose", "pipe")
+            words.append(w)
+    return " ".join(words)
+
+
 def build(prompt_type: str, filler_words: int, rep: int, nonce: str) -> str:
     """The nonce goes first so prefix caches miss on every run."""
     spec = PROMPTS[prompt_type]
     instruction = spec["text"].format(seed_words=random_words(8, seed=10_000 + rep))
     parts = [f"[run {nonce}]"]
     if filler_words > 0:
-        parts.append("Reference notes (ignore these):\n" + random_words(filler_words, seed=rep))
+        parts.append("Reference notes (ignore these):\n" + filler(filler_words, seed=rep))
     parts.append(instruction)
     return "\n\n".join(parts)
