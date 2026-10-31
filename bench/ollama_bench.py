@@ -204,6 +204,8 @@ def main():
     ap.add_argument("--out-dir", type=Path, default=REPO / "results")
     ap.add_argument("--host", default="http://127.0.0.1:11434")
     ap.add_argument("--server-log", type=Path, default=Path.home() / ".ollama/logs/server.log")
+    ap.add_argument("--no-save-outputs", dest="save_outputs", action="store_false",
+                    help="don't write <run_id>.outputs.jsonl with each run's generated text")
     ap.add_argument("--run-timeout", type=float, default=1200,
                     help="wall-clock limit per request in seconds; on expiry the model is unloaded (0 = none)")
     ap.add_argument("--stats-timeout", type=float, default=3.0, help="seconds to wait for the stats log line")
@@ -243,6 +245,8 @@ def main():
     environment.update(run_id=run_id, machine=machine, argv=sys.argv[1:])
     (out / f"{run_id}.env.json").write_text(json.dumps(environment, indent=2) + "\n")
     writer = schema.Writer(out / f"{run_id}.csv")
+    # generated text, for explaining outliers (e.g. a "random" run whose acceptance looks predictable)
+    outputs = open(out / f"{run_id}.outputs.jsonl", "a") if args.save_outputs else None
     print(f"writing {out / run_id}.csv ({total} runs)", file=sys.stderr)
 
     log = LogTail(args.server_log)
@@ -328,6 +332,11 @@ def main():
                     if stats.get("iterations"):
                         row["tokens_per_pass"] = round(ev_n / stats["iterations"], 3)
                     writer.write(row)
+                    if outputs:
+                        outputs.write(json.dumps({k: row[k] for k in ("timestamp_utc", "model", "prompt_type",
+                                                                      "target_depth", "rep")}
+                                                 | {"response": resp.get("response", "")}) + "\n")
+                        outputs.flush()
 
                     done += 1
                     acc = f" acc={stats['acceptance']:.2f} tok/pass={row['tokens_per_pass']}" if stats else " (no spec stats)"
@@ -342,6 +351,8 @@ def main():
         print("interrupted; partial results kept", file=sys.stderr)
     finally:
         writer.close()
+        if outputs:
+            outputs.close()
 
 
 if __name__ == "__main__":

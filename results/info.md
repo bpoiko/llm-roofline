@@ -10,7 +10,8 @@ results/
 │   ├── predictions.csv             roofline ceilings, written before runs (predict.py)
 │   ├── <ts>_<runtime>.csv          one row per request, schema in bench/info.md
 │   ├── <ts>_<runtime>.env.json     hardware/OS/runtime versions for that invocation
-│   └── <ts>_llamacpp.raw.jsonl     llama-bench's untouched output
+│   ├── <ts>_llamacpp.raw.jsonl     llama-bench's untouched output
+│   └── <ts>_ollama.outputs.jsonl   generated text per run, to explain outliers (--no-save-outputs to skip)
 ├── plots/                          figures + summary.csv (plots.py), regenerated from everything above
 └── _smoke/                         quick pipeline checks, ignored by plots and git
 ```
