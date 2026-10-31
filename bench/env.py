@@ -52,6 +52,17 @@ def charger_watts() -> int | None:
     return int(m.group(1)) if m else None
 
 
+ENERGY_MODES = {0: "automatic", 1: "low power", 2: "high power"}
+
+
+def energy_mode() -> str | None:
+    """macOS Energy Mode for the current power source (System Settings > Battery).
+    Automatic may lower clocks under sustained load; set High Power for sweeps with
+    `sudo pmset -c powermode 2`. It doesn't add watts: an undersized charger still drains."""
+    m = re.search(r"^\s*powermode\s+(\d+)", _run("pmset", "-g"), re.M)
+    return ENERGY_MODES.get(int(m.group(1)), m.group(1)) if m else None
+
+
 def power_problem(start_pct: int | None, max_drop: int = 10) -> str | None:
     """Why measurements would be power-limited right now, or None. A battery falling while
     plugged in means the charger can't keep up with the load, whatever its rating."""
@@ -84,6 +95,7 @@ def _darwin() -> dict:
         "power_source": power_source(),
         "charger_w": charger_watts(),
         "battery_pct": battery_pct(),
+        "energy_mode": energy_mode(),
         "os": "macOS",
         "os_version": _run("sw_vers", "-productVersion"),
         "os_build": _run("sw_vers", "-buildVersion"),

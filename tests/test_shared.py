@@ -151,3 +151,14 @@ def test_suite_refuses_undersized_charger(monkeypatch):
     monkeypatch.setattr("sys.argv", ["suite", "run", "--machine", "m4pro-24gb"])
     with pytest.raises(SystemExit, match="charger is 30 W"):
         suite.main()
+
+
+@pytest.mark.parametrize("out,mode", [
+    (" hibernatemode        3\n powermode            0\n", "automatic"),
+    (" powermode            2\n", "high power"),
+    (" powermode            1\n", "low power"),
+    ("", None),
+])
+def test_energy_mode(monkeypatch, out, mode):
+    monkeypatch.setattr(env, "_run", lambda *cmd: out)
+    assert env.energy_mode() == mode

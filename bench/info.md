@@ -63,6 +63,9 @@ model with two requests; MLX counts exactly with the local tokenizer. The actual
     *or* the battery falls 10 points while plugged in;
   - every row records `battery_pct`, env.json records `power_source`, `charger_w` and `battery_pct`;
   - sweeps hold a `caffeinate` assertion. `--allow-battery` overrides all of it.
+  - env.json records the macOS **Energy Mode**; `suite.py` warns unless it's High Power
+    (`sudo pmset -c powermode 2`). Automatic can lower clocks under sustained load. High Power
+    doesn't add watts, though: it draws *more*, so it needs the proper charger even more.
 - **Hung requests.** A socket timeout doesn't fire on a stalled server. A watchdog unloads the
   model after `--run-timeout` (default 1200 s), which aborts the request. Deeper cells for
   that model are then written as `skipped` error rows rather than attempted.

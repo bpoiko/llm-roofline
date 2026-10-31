@@ -160,7 +160,8 @@ def write_machine_info(machine: str, host: dict):
 def cmd_check(cfg, machine, host, args) -> int:
     ok = True
     print(f"machine: {machine}")
-    for k in ["chip", "gpu_cores", "ram_gb", "gpu_wired_limit_mb", "os_version", "power_source"]:
+    for k in ["chip", "gpu_cores", "ram_gb", "gpu_wired_limit_mb", "os_version", "power_source", "charger_w",
+              "battery_pct", "energy_mode"]:
         print(f"  {k}: {host.get(k)}")
     machines = json.loads((REPO / "config" / "machines.json").read_text())
     if machine not in machines:
@@ -346,6 +347,10 @@ def main():
             if min_w and watts is not None and watts < min_w:
                 sys.exit(f"charger is {watts} W; {machine} needs >= {min_w} W under full GPU load or it drains "
                          "the battery and throttles. --allow-battery to override.")
+        mode = env.energy_mode()
+        if mode not in (None, "high power"):
+            print(f"warning: macOS Energy Mode is '{mode}'; sustained-load clocks may vary. For comparable "
+                  "sweeps: sudo pmset -c powermode 2 (High Power, on charger only).", file=sys.stderr)
         if shutil.which("caffeinate"):
             # no idle/system sleep while this process lives (can't stop a dying battery: hence the check above)
             subprocess.Popen(["caffeinate", "-ims", "-w", str(os.getpid())])
