@@ -3,6 +3,7 @@
 import csv
 import json
 import socket
+from pathlib import Path
 
 import pytest
 
@@ -74,3 +75,21 @@ def test_env_capture_has_no_identifying_fields():
     for word in ("serial", "uuid", "provisioning", "udid"):
         assert word not in blob
     assert socket.gethostname().lower() not in blob
+
+
+def test_tilde():
+    home = str(Path.home())
+    assert env.tilde(home + "/.cache/x.gguf") == "~/.cache/x.gguf"
+    assert env.tilde("/opt/x.gguf") == "/opt/x.gguf"
+    assert env.tilde(home + "extra/x") == home + "extra/x"  # not under home, just a shared prefix
+
+
+def test_no_home_paths_in_published_files():
+    """config/ and results/ are committed to a public repo: no username-bearing paths."""
+    home = str(Path.home())
+    repo = Path(__file__).resolve().parent.parent
+    leaks = [str(f.relative_to(repo)) for d in ("config", "results")
+             for f in (repo / d).rglob("*")
+             if f.is_file() and "_smoke" not in f.parts and f.suffix in (".json", ".jsonl", ".csv", ".md", ".toml")
+             and home in f.read_text(errors="ignore")]
+    assert not leaks, f"absolute home paths in: {leaks} (use env.tilde)"

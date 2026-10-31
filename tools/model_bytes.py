@@ -56,6 +56,12 @@ def category(name: str) -> str | None:
     return "other"
 
 
+def tilde(s: str) -> str:
+    """Home-relative path: portable across machines, and no username in published results."""
+    home = str(Path.home())
+    return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
+
+
 # ---- sources ---------------------------------------------------------------
 
 def from_ollama(tag: str) -> tuple[Counter, dict | None, str]:
@@ -220,7 +226,7 @@ def main():
     lm_head = sizes["lm_head"] or (sizes["embed"] if tied else 0)
     entry = {
         "runtime": runtime,
-        "model": ref,
+        "model": tilde(ref),
         "label": args.label,
         "quant": quant,
         "bytes": dict(sorted(sizes.items())),
@@ -235,11 +241,11 @@ def main():
         print("warning: no config.json; pass --hf-config for KV/state sizes", file=sys.stderr)
 
     models = json.loads(MODELS_JSON.read_text()) if MODELS_JSON.exists() else {}
-    models[f"{runtime}:{ref}"] = entry
+    models[f"{runtime}:{tilde(ref)}"] = entry
     MODELS_JSON.parent.mkdir(parents=True, exist_ok=True)
     MODELS_JSON.write_text(json.dumps(dict(sorted(models.items())), indent=2) + "\n")
     gb = {k: round(v / 1e9, 3) for k, v in entry["bytes"].items()}
-    print(f"{runtime}:{ref}  {gb}  -> weights/token {entry['weight_bytes_per_token'] / 1e9:.3f} GB", file=sys.stderr)
+    print(f"{runtime}:{tilde(ref)}  {gb}  -> weights/token {entry['weight_bytes_per_token'] / 1e9:.3f} GB", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ Called by llamacpp_bench.sh; usable alone on any `llama-bench -o jsonl` output."
 
 import argparse
 import json
-import shutil
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -43,16 +42,17 @@ def main():
     machine = args.machine or env.default_machine_slug(environment["host"])
     out = args.out_dir / machine
     out.mkdir(parents=True, exist_ok=True)
-    environment.update(run_id=args.run_id, machine=machine, argv=args.argv.split())
+    environment.update(run_id=args.run_id, machine=machine, argv=[env.tilde(a) for a in args.argv.split()])
     (out / f"{args.run_id}.env.json").write_text(json.dumps(environment, indent=2) + "\n")
-    shutil.copy(args.raw, out / f"{args.run_id}.raw.jsonl")
+    home = str(Path.home())
+    (out / f"{args.run_id}.raw.jsonl").write_text(args.raw.read_text().replace(home + "/", "~/"))
 
     # (model, depth) -> {"pp": test, "tg": test}
     cells = defaultdict(dict)
     for t in tests:
         kind = "pp" if t["n_gen"] == 0 else "tg" if t["n_prompt"] == 0 else None
         if kind:
-            cells[(t["model_filename"], t.get("n_depth", 0))][kind] = t
+            cells[(env.tilde(t["model_filename"]), t.get("n_depth", 0))][kind] = t
 
     writer = schema.Writer(out / f"{args.run_id}.csv")
     n = 0

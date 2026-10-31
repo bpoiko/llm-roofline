@@ -1,4 +1,33 @@
 {
+  "llamacpp:~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q3_K_M.gguf": {
+    "runtime": "llamacpp",
+    "model": "~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q3_K_M.gguf",
+    "label": "qwen3.5-9b",
+    "quant": "Q3_K",
+    "bytes": {
+      "embed": 437043200,
+      "layers": 3391260672,
+      "lm_head": 834355200,
+      "other": 16384
+    },
+    "weight_bytes_per_token": 4225632256,
+    "mtp_bytes": 0,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 32,
+      "n_full_attn_layers": 8,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 24,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 32,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 32768,
+    "state_bytes_per_token": 100663296
+  },
   "llamacpp:~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf": {
     "runtime": "llamacpp",
     "model": "~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q4_K_M.gguf",
@@ -11,6 +40,35 @@
       "other": 16384
     },
     "weight_bytes_per_token": 5097424896,
+    "mtp_bytes": 0,
+    "updated": "2026-10-31",
+    "arch": {
+      "n_layers": 32,
+      "n_full_attn_layers": 8,
+      "n_kv_heads": 4,
+      "head_dim": 256,
+      "n_linear_layers": 24,
+      "kv_dtype_bytes": 2,
+      "state_dtype_bytes": 4,
+      "linear_v_heads": 32,
+      "linear_k_dim": 128,
+      "linear_v_dim": 128
+    },
+    "kv_bytes_per_ctx_token": 32768,
+    "state_bytes_per_token": 100663296
+  },
+  "llamacpp:~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q8_0.gguf": {
+    "runtime": "llamacpp",
+    "model": "~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q8_0.gguf",
+    "label": "qwen3.5-9b",
+    "quant": "Q8_0",
+    "bytes": {
+      "embed": 1080688640,
+      "layers": 7355140096,
+      "lm_head": 1080688640,
+      "other": 16384
+    },
+    "weight_bytes_per_token": 8435845120,
     "mtp_bytes": 0,
     "updated": "2026-10-31",
     "arch": {

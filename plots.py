@@ -43,6 +43,12 @@ plt.rcParams.update({
 })
 
 
+def tilde(s: str) -> str:
+    """Home-relative path: portable across machines, and no username in published results."""
+    home = str(Path.home())
+    return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
+
+
 def num(v):
     try:
         return float(v)
@@ -61,6 +67,7 @@ def load_runs(results: Path, machines: set[str] | None, min_tokens: int, models:
                     continue
                 if r.get("error") or num(r.get("decode_tps")) is None or (num(r["eval_count"]) or 0) < min_tokens:
                     continue
+                r["model"] = tilde(r["model"])  # older llama.cpp CSVs hold absolute paths
                 m = models.get(f"{r['runtime']}:{r['model']}")
                 r["label"] = m["label"] if m else r["model"]
                 r["depth"] = (num(r["prompt_tokens"]) or 0) + (num(r["eval_count"]) or 0) / 2

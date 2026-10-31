@@ -7,6 +7,7 @@ import json
 import platform
 import re
 import subprocess
+from pathlib import Path
 
 
 def _run(*cmd: str) -> str:
@@ -71,6 +72,12 @@ def _linux() -> dict:
         name, mem_mib, driver = [s.strip() for s in smi.splitlines()[0].split(",")]
         info.update(gpu_name=name, gpu_mem_gb=round(int(mem_mib) / 1024), nvidia_driver=driver)
     return info
+
+
+def tilde(s: str) -> str:
+    """Home-relative path: portable across machines, and no username in published results."""
+    home = str(Path.home())
+    return "~" + s[len(home):] if s == home or s.startswith(home + "/") else s
 
 
 def capture(runtime: dict) -> dict:

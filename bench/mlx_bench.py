@@ -73,7 +73,7 @@ def main():
     machine = args.machine or env.default_machine_slug(environment["host"])
     out = args.out_dir / machine
     out.mkdir(parents=True, exist_ok=True)
-    environment.update(run_id=run_id, machine=machine, argv=sys.argv[1:])
+    environment.update(run_id=run_id, machine=machine, argv=[env.tilde(a) for a in sys.argv[1:]])
     (out / f"{run_id}.env.json").write_text(json.dumps(environment, indent=2) + "\n")
     writer = schema.Writer(out / f"{run_id}.csv")
     print(f"writing {out / run_id}.csv ({total} runs)", file=sys.stderr)
