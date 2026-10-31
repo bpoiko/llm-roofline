@@ -8,7 +8,7 @@ Safe to delete; it's fully regenerated. This file is the only hand-written one h
 | `roofline.png` | decode t/s vs GB read per token, log–log; one line per machine at BW/bytes | Filled markers (one pass per token) should sit at or just under their machine's line, and the gap is runtime inefficiency. Hollow markers are speculative and *can* sit above it. Solid line = measured BW, dashed = assumed. |
 | `depth_<machine>.png` | decode t/s vs context depth during decode (prompt + half the output) | The dashed line is the predicted ceiling for the same model files. A steeper measured slope means attention costs more than reading KV bytes alone (e.g. compute or kernel overhead). |
 | `mtp_<machine>.png` | decode t/s vs MTP draft acceptance; marker = prompt type | The dashed line is the plain-decode ceiling. Points above it mean speculation pays off; points below mean a speculative pass (~2–2.6× a plain one) costs more than it returns. |
-| `summary.csv` | median per (machine, runtime, model, prompt type, depth): decode, prefill, acceptance, tokens/pass, bytes/token, ceiling, **efficiency** = decode / ceiling | Use this as the table view. Efficiency > 1 is only possible with speculation. |
+| `summary.csv` | median per (machine, run, runtime, model, prompt type, depth), with median battery %: decode, prefill, acceptance, tokens/pass, bytes/token, ceiling, **efficiency** = decode / ceiling | Use this as the table view. Efficiency > 1 is only possible with speculation. |
 
 Colors follow the entity (machine, or model·runtime series) in a fixed palette order, so
 the same thing keeps the same color across figures in a single render.

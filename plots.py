@@ -214,19 +214,20 @@ def plot_mtp(rows, models, bw, machine: str, out: Path):
 def write_summary(rows, bw, out: Path):
     cells = defaultdict(list)
     for r in rows:
-        cells[(r["machine"], r["runtime"], r["model"], r["label"], r["prompt_type"], r["target_depth"])].append(r)
+        # run_id keeps sweeps under different conditions (e.g. charge level) as separate medians
+        cells[(r["machine"], r["run_id"], r["runtime"], r["model"], r["label"], r["prompt_type"], r["target_depth"])].append(r)
     with open(out / "summary.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["machine", "runtime", "model", "label", "prompt_type", "target_depth", "n",
+        w.writerow(["machine", "run_id", "runtime", "model", "label", "prompt_type", "target_depth", "n", "median_battery_pct",
                     "median_decode_tps", "median_prefill_tps", "median_acceptance", "median_tokens_per_pass",
                     "bytes_per_token_gb", "ceiling_tps", "efficiency"])
-        for (machine, runtime, model, label, pt, depth), rs in sorted(cells.items()):
+        for (machine, run_id, runtime, model, label, pt, depth), rs in sorted(cells.items()):
             med = lambda k: (round(statistics.median(v), 2)  # noqa: E731
                              if (v := [x for r in rs if (x := num(r.get(k))) is not None]) else "")
             decode = med("decode_tps")
             b = statistics.median(r["bytes_gb"] for r in rs) if all("bytes_gb" in r for r in rs) else None
             ceiling = round(bw[machine][0] / b, 2) if b and machine in bw else ""
-            w.writerow([machine, runtime, model, label, pt, depth, len(rs), decode, med("prefill_tps"),
+            w.writerow([machine, run_id, runtime, model, label, pt, depth, len(rs), med("battery_pct"), decode, med("prefill_tps"),
                         med("spec_acceptance"), med("tokens_per_pass"), round(b, 4) if b else "", ceiling,
                         round(decode / ceiling, 3) if ceiling and decode != "" else ""])
     print(f"wrote {out / 'summary.csv'}")
