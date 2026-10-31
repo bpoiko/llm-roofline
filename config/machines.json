@@ -1,0 +1,37 @@
+{
+  "m4pro-24gb": {
+    "description": "MacBook Pro, Apple M4 Pro 12C CPU / 16C GPU, 24 GB",
+    "kind": "apple",
+    "nominal_bw_gbs": 273,
+    "mem_gb": 24,
+    "gpu_mem_budget_gb": 21.4,
+    "runtimes": ["ollama", "mlx", "llamacpp"],
+    "status": "active"
+  },
+  "m5pro-64gb": {
+    "description": "MacBook Pro, Apple M5 Pro, 64 GB (arrives 2026-11-20)",
+    "kind": "apple",
+    "nominal_bw_gbs": 307,
+    "mem_gb": 64,
+    "gpu_mem_budget_gb": 48,
+    "runtimes": ["ollama", "mlx", "llamacpp"],
+    "status": "pending"
+  },
+  "rtx5070ti-16gb": {
+    "description": "Desktop, NVIDIA RTX 5070 Ti 16 GB GDDR7",
+    "kind": "nvidia",
+    "nominal_bw_gbs": 896,
+    "mem_gb": 16,
+    "gpu_mem_budget_gb": 15,
+    "runtimes": ["ollama", "llamacpp"],
+    "status": "pending"
+  },
+  "_notes": {
+    "gpu_mem_budget_gb": "Apple: iogpu.wired_limit_mb if raised (m4pro-24gb: 20480 MB = 21.4 GB), else macOS default of ~2/3 of RAM at 24 GB and ~3/4 at 64 GB. env.json records the value in effect. NVIDIA: VRAM minus display/driver overhead.",
+    "assumed_efficiency": "Fraction of nominal used when results/<machine>/membw.json is missing. M4 Pro measured 260/273 = 0.95 on the MLX read kernel.",
+    "machine keys": "Must match the results/<machine>/ slug, i.e. bench/env.py default_machine_slug() or the --machine flag."
+  },
+  "_defaults": {
+    "assumed_efficiency": 0.95
+  }
+}
