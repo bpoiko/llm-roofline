@@ -94,3 +94,81 @@ question for this repo.
 | AI, decode | 2N / bytes per token | ~3 FLOP/byte |
 | ridge | peak FLOP/s / BW | ~30 FLOP/byte |
 | tokens per pass to reach ridge | ridge / AI_decode | ~10 |
+
+---
+
+# Fine-tuning: LoRA from scratch
+
+Next goal: implement LoRA myself in MLX, then compare against `mlx_lm.lora`.
+
+## Why training sits on the other side of the roofline
+Training runs a forward **and** backward pass over a batch of tokens:
+
+```
+full fine-tune ≈ 6N FLOPs per token   (2N forward + 4N backward: activation grads + weight grads)
+LoRA           ≈ 4N FLOPs per token   (frozen weights need activation grads, but no weight grads)
+```
+A training step pushes thousands of tokens through each weight it reads, so arithmetic
+intensity is far above the ~30 FLOP/byte ridge. Training is **compute bound**: peak FLOPS
+matters, not bandwidth. This is the opposite of decode, and it's where the M5's GPU
+neural accelerators should matter much more than they do for decode.
+→ [Transformer Math 101](https://blog.eleuther.ai/transformer-math/) derives 6N and the memory below.
+→ [How to Scale Your Model](https://jax-ml.github.io/scaling-book/): the roofline chapter, applied to training.
+→ [Kaplan et al. 2020, *Scaling Laws*](https://arxiv.org/abs/2001.08361): where C ≈ 6ND comes from.
+
+## Why LoRA (and QLoRA) is what fits on a Mac
+Full fine-tuning with Adam in mixed precision needs roughly **16 bytes per parameter**:
+bf16 weights (2) + bf16 grads (2) + fp32 master weights, momentum and variance (12).
+That's about **150 GB for a 9B model**, before activations. It doesn't fit on any of my machines.
+
+LoRA freezes W and learns a low-rank update:
+
+```
+h = W x + (α / r) · B A x        A: r × d_in   B: d_out × r   r ≪ d   B initialised to 0
+```
+- Trainable params per adapted matrix = r · (d_in + d_out). For d = 4096, r = 16 that's
+  **131k**, against 16.8M in W itself (0.8%).
+- B = 0 means step 0 *is* the base model. That's a free correctness test.
+- **QLoRA** keeps the frozen W in 4-bit, so the 9B base is ~5 GB and only the adapters
+  carry gradients and optimizer state. A 9B QLoRA should fit in 24 GB with headroom, the 27B
+  would be tight under the 20 GB GPU limit, and the 64 GB M5 Pro makes it comfortable.
+
+## Build plan, with what to read at each step
+
+**1. LoRA layer.** Wrap a frozen `nn.Linear`, add trainable `A` (small random) and `B` (zeros), scale by α/r.
+- [LoRA paper, Hu et al. 2021](https://arxiv.org/abs/2106.09685): §4.1 is the whole method, and §7 covers which matrices to adapt.
+- [MLX `nn.Module` docs](https://ml-explore.github.io/mlx/build/html/python/nn/module.html): `freeze()`, `trainable_parameters()`.
+- ✅ Test: output equals the base layer's exactly at init. Trainable count = r·(d_in + d_out).
+
+**2. Training loop on a toy task.** Teach a tiny model one fixed answer format.
+- [MLX `nn.value_and_grad`](https://ml-explore.github.io/mlx/build/html/python/_autosummary/mlx.nn.value_and_grad.html) and [`mlx.optimizers`](https://ml-explore.github.io/mlx/build/html/python/optimizers.html) (AdamW).
+- [MLX examples: a minimal training loop](https://github.com/ml-explore/mlx-examples) (`mnist/`, `transformer_lm/`) for the loop's shape.
+- ✅ Test: loss falls; base weights are bit-identical after training.
+
+**3. Into a real model.** Load a small Qwen (0.5B–1.5B) with `mlx_lm.load`, swap `LoRALinear` into
+the attention projections (q/k/v/o), then try the MLP projections too.
+- [LLMs from Scratch, Raschka](https://github.com/rasbt/LLMs-from-scratch): ch. 6–7 cover fine-tuning and instruction data, and appendix E is LoRA. It's PyTorch, but it ports almost line for line.
+- [Hugging Face PEFT LoRA guide](https://huggingface.co/docs/peft/developer_guides/lora): which modules people target, typical r and α.
+- ✅ Test: held-out loss improves on the fine-tune task; outputs on unrelated prompts barely change.
+
+**4. Compare against the reference implementation.**
+- [mlx-lm](https://github.com/ml-explore/mlx-lm): `mlx_lm/LORA.md` (data format, flags) and the `mlx_lm/tuner/` source.
+- Run `mlx_lm.lora` on the same data and config; compare loss curves, tokens/s and peak memory with mine.
+
+**5. QLoRA on the 9B, then measure it like a roofline.**
+- [QLoRA paper, Dettmers et al. 2023](https://arxiv.org/abs/2305.14314): 4-bit frozen base, adapters in higher precision.
+- Measure training tokens/s → achieved FLOP/s ≈ tokens/s × 4N. Compare with peak compute
+  (still a to-do: a matmul probe in `bench/`). That's the compute-side roofline.
+
+**Later**
+- [DoRA, Liu et al. 2024](https://arxiv.org/abs/2402.09353): splits the update into magnitude and direction.
+- [Unsloth docs](https://docs.unsloth.ai/): fast QLoRA on the RTX 5070 Ti.
+- [HF LLM course](https://huggingface.co/learn/llm-course): fine-tuning chapters, data formatting, chat templates.
+
+## Fine-tuning cheat sheet
+| quantity | formula | 9B example |
+|---|---|---|
+| training FLOPs/token | 6N full, ~4N LoRA | ~48 / ~32 GFLOP |
+| full fine-tune memory (Adam, mixed precision) | ~16 B/param + activations | ~150 GB |
+| LoRA params per matrix | r · (d_in + d_out) | 131k at d=4096, r=16 |
+| QLoRA base weights | ~0.5–0.6 B/param | ~5 GB |
