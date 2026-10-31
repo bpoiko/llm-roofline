@@ -50,6 +50,10 @@ model with two requests; MLX counts exactly with the local tokenizer. The actual
 - **Stats line timing.** The `speculative decode stats` line is written ~50 ms after the
   HTTP response. The bench tails the log from a byte offset and waits up to `--stats-timeout`.
 - **Prefix cache.** Every Ollama prompt starts with a random nonce.
+- **Hangs under memory pressure.** A 27B at 16k context on the 24 GB M4 Pro swap-thrashed
+  and one request hung for 9 hours; the socket timeout never fired. A watchdog unloads the
+  model after `--run-timeout` (default 1200 s), which aborts the request. Deeper cells for
+  that model are then written as `skipped` error rows rather than attempted.
 - **Nothing else may use the Ollama server during a sweep.** Log lines are matched to requests by order only.
 
 ## Adding a runtime

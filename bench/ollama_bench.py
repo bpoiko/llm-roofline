@@ -18,6 +18,7 @@ import json
 import random
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -100,7 +101,15 @@ def api(host: str, path: str, body: dict | None = None, timeout: float = 3600) -
         return json.loads(r.read())
 
 
-def generate(host: str, model: str, prompt: str, options: dict) -> tuple[dict, float]:
+class RunTimeout(Exception):
+    pass
+
+
+def generate(host: str, model: str, prompt: str, options: dict, timeout: float | None = None) -> tuple[dict, float]:
+    """With timeout: a watchdog unloads the model if the request runs too long. A socket
+    timeout isn't enough: when the 27B pushed a 24 GB machine into swap thrash, the
+    request hung for 9 hours without tripping one. Unloading aborts the runner and
+    frees the memory, and the request then fails fast."""
     body = {
         "model": model,
         "prompt": prompt,
@@ -109,8 +118,31 @@ def generate(host: str, model: str, prompt: str, options: dict) -> tuple[dict, f
         "keep_alive": "30m",
         "options": options,
     }
+    fired = threading.Event()
+
+    def watchdog():
+        fired.set()
+        try:
+            api(host, "/api/generate", {"model": model, "keep_alive": 0}, timeout=30)
+        except Exception:
+            pass
+
+    timer = threading.Timer(timeout, watchdog) if timeout else None
+    if timer:
+        timer.daemon = True
+        timer.start()
     t0 = time.perf_counter()
-    resp = api(host, "/api/generate", body)
+    try:
+        resp = api(host, "/api/generate", body)
+    except Exception as e:
+        if fired.is_set():
+            raise RunTimeout(f"exceeded {timeout:.0f}s; model unloaded") from e
+        raise
+    finally:
+        if timer:
+            timer.cancel()
+    if fired.is_set():
+        raise RunTimeout(f"exceeded {timeout:.0f}s; model unloaded")
     return resp, time.perf_counter() - t0
 
 
@@ -172,6 +204,8 @@ def main():
     ap.add_argument("--out-dir", type=Path, default=REPO / "results")
     ap.add_argument("--host", default="http://127.0.0.1:11434")
     ap.add_argument("--server-log", type=Path, default=Path.home() / ".ollama/logs/server.log")
+    ap.add_argument("--run-timeout", type=float, default=1200,
+                    help="wall-clock limit per request in seconds; on expiry the model is unloaded (0 = none)")
     ap.add_argument("--stats-timeout", type=float, default=3.0, help="seconds to wait for the stats log line")
     ap.add_argument("--cooldown", type=float, default=0.0, help="seconds to sleep between runs")
     ap.add_argument("--no-isolate", dest="isolate", action="store_false",
@@ -218,6 +252,7 @@ def main():
         for model in args.models:
             info = tags.get(model) or tags[f"{model}:latest"]
             num_ctx = args.num_ctx or round_up(max(args.depths) + args.num_predict + 1024)
+            timed_out_at = float("inf")
 
             print(f"[{model}] warmup + tokenizer calibration", file=sys.stderr)
             log.mark()
@@ -254,17 +289,24 @@ def main():
                         "temperature": temperature,
                         "seed": options["seed"],
                     }
+                    if depth >= timed_out_at:
+                        row["error"] = f"skipped: a run at depth {timed_out_at} timed out"
+                        writer.write(row)
+                        continue
                     try:
                         load_s = None
                         if args.isolate:
                             unload(args.host, model)
                             load_s = reload(args.host, model, num_ctx, log, args.stats_timeout)
                         log.mark()
-                        resp, wall = generate(args.host, model, prompt, options)
-                    except (urllib.error.URLError, TimeoutError) as e:
+                        resp, wall = generate(args.host, model, prompt, options, args.run_timeout or None)
+                    except (urllib.error.URLError, TimeoutError, RunTimeout) as e:
                         row["error"] = str(e)[:200]
                         writer.write(row)
                         print(f"  error: {e}", file=sys.stderr)
+                        if isinstance(e, RunTimeout):
+                            # deeper contexts only need more memory and time
+                            timed_out_at = min(timed_out_at, depth)
                         continue
                     stats = log.wait_stats(args.stats_timeout) or {}
 
