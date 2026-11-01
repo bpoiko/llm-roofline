@@ -62,37 +62,85 @@ results/plots/      roofline.png, depth_<machine>.png, mtp_<machine>.png, summar
    Every Ollama request is cache-busted, `think=false`, and run on a freshly loaded,
    warmed model (see the traps in `bench/info.md`).
 
-## Findings so far (M4 Pro)
-Earlier manual runs, before this suite:
+## Findings (M4 Pro, 24 GB)
+Full sweep, 2026-10-31: 3 reps per cell, 512 tokens per run (llama.cpp: pp512 + tg128,
+5 reps). Measured bandwidth **259.5 GB/s** (95% of 273 nominal), High Power mode on a
+60 W supply. Per-cell medians are in [`results/plots/summary.csv`](results/plots/summary.csv);
+the raw rows are in [`results/m4pro-24gb/`](results/m4pro-24gb/).
+
+![roofline](results/plots/roofline.png)
+
+### 1. Plain decode lands at ~89% of the bandwidth roofline, at every depth
+mlx-lm with no draft model (the speculation-off control):
+
+| model | bytes/token (depth 0) | ceiling | measured | efficiency |
+|---|---|---|---|---|
+| Qwen3.5-9B 4-bit | 4.57 GB | 56.7 t/s | 50.4 t/s | 0.89 |
+| Qwen3.6-27B 4-bit | 14.72 GB | 17.6 t/s | 15.6 t/s | 0.89 |
+
+Efficiency stays between **0.885 and 0.899 in every cell**: both models, all three prompt types,
+and depths 0, 4k and 16k. The byte model (weights + recurrent state + KV × depth) predicts
+the depth effect, not just the depth-0 point. Content makes no difference without speculation.
+
+### 2. Depth costs about what reading the KV cache costs
+The 9B's 8 full-attention layers hold 32 KB of KV per context token, which predicts
+**0.126 ms per 1k tokens** at 259.5 GB/s. Measured per-token slowdown, depth 0 → 16k:
+MLX **0.149 ms/1k**, Ollama essay **0.157 ms/1k**. The ~0.33 ms/1k from the earlier manual
+runs did not reproduce. Counting looks steeper on Ollama only because tokens/pass falls
+with depth (5.33 → 4.06), not because each pass costs more.
+
+### 3. MTP speculation: a big win on predictable text, break-even on unpredictable
+Ollama (MTP always on), against each model's plain-decode ceiling:
+
+| | counting | essay | random |
+|---|---|---|---|
+| 9B decode (ceiling 49.1) | **87.3 t/s** (1.78×) | 52.3 (1.07×) | 46.1 (0.94×) |
+| 27B decode (ceiling 17.6) | **39.1 t/s** (2.23×) | 22.3 (1.27×) | 16.1 (0.92×) |
+| tokens per pass (9B / 27B) | 5.33 / 5.33 | 1.67 / 1.96 | 1.35 / 1.23 |
+
+- Tokens per pass ≈ accepted drafts + 1. Every accepted draft has been verified by the full
+  model, so output is unchanged; one full weight read is just shared across more tokens.
+- On random text speculation roughly **breaks even**. 0.92–0.94 of the ceiling vs ~0.89
+  for plain decode: no gain, but no real loss.
+- The 27B gains more than the 9B (2.23× vs 1.78× on counting). Its draft head is a smaller
+  share of what each pass reads (0.85 / 14.5 GB vs 0.49 / 5.2 GB).
+
+![MTP](results/plots/mtp_m4pro-24gb.png)
+
+### 4. Smaller quants hit the compute roof (llama.cpp)
+| Qwen3.5-9B GGUF | bytes/token | ceiling | decode | efficiency |
+|---|---|---|---|---|
+| Q8_0 | 8.54 GB | 30.4 t/s | 26.7 t/s | 0.88 |
+| Q4_K_M | 5.20 GB | 49.9 t/s | 36.8 t/s | 0.74 |
+| Q3_K_M | 4.33 GB | 60.0 t/s | **29.1 t/s** | 0.48 |
+
+Q3_K_M reads 17% fewer bytes than Q4_K_M but decodes **21% slower**. Unpacking 3-bit
+K-quants costs enough GPU arithmetic per byte that decode is no longer purely bandwidth
+bound. Q8_0's simple dequantization matches MLX's ~88%.
+
+### 5. Power delivery limits compute, not bandwidth
+- Prefill is compute bound and moved with power. On a 60 W supply with the battery at
+  ~33%, Ollama 27B prefill at 4k ran at **62–68 t/s**; at ~42% it ran at **92–100 t/s**.
+  Decode, which is bandwidth bound, didn't move. *(A 27B rerun at ≥ 80% charge is in progress.)*
+- The MLX 27B (20.5 GB peak) draws more than 60 W: the battery fell 44% → 34% during its
+  stage, and the drain guard stopped it 2 cells early. The 9B and Ollama's 27B charged the
+  battery throughout.
+- Earlier attempts on battery and on a 30 W charger throttled decode by up to ~40% and were
+  discarded. Hence the power guards in `suite.py` (see `bench/info.md`).
+
+### Methodology traps found along the way
+- **Ollama's MTP draft depth persists across requests.** One low-acceptance request left the
+  next starting at depth 0 (2.9 → 1.46 tokens/pass on the same prompt). Every run now gets a
+  fresh, warmed runner.
+- **Context filler can leak into the task.** English-word filler let `random` copy from its own
+  context (acceptance 0.9 at 16k). Filler is now pronounceable non-words.
+- **Lazy page-in after reload** inflated 27B prefill (5 t/s instead of 90) until a 1-token warm-up was added.
+
+### From the earlier manual runs (before the suite)
 - Ollama runs qwen3.5:9b and qwen3.6:27b (NVFP4) through its MLX runner, not llama.cpp.
-- MTP speculative decoding is always on. `draft_num_predict=0` (API option or Modelfile) does **not** disable it.
+- MTP is always on: `draft_num_predict=0` (API option or Modelfile) does **not** disable it.
 - Ollama's `eval_duration` matches wall clock to within ~1%.
-- Decode depends on content. 9B: ~80 t/s counting vs ~50 essay. 27B: ~35 vs ~23.5.
-- A speculative pass costs ~2–2.6× a plain one (52 ms vs ~20 ms on the 9B), so ~4 tokens/pass gives only ~1.6–2×.
-- 9B decode slows linearly with depth, ~0.33 ms per 1k tokens (hybrid Gated DeltaNet: 1 in 4 layers keeps a KV cache).
-
-Found while building the suite (smoke runs, n = 1 per cell; treat as provisional):
-- **MTP draft-depth state leaks across Ollama requests.** After a low-acceptance request the
-  adaptive depth sits at 0 and the next request inherits it. A counting prompt then got
-  1.46 tokens/pass instead of 2.9. An earlier "MTP stops working at depth" result was
-  entirely this. The suite now reloads the model before every request.
-- **Refined ceilings from tensor bytes** (260 GB/s measured). The bytes are weights + recurrent state:
-
-  | model | bytes/token | ceiling |
-  |---|---|---|
-  | qwen3.5:9b (Ollama) | 5.17 GB | 49.4 t/s |
-  | qwen3.6:27b (Ollama) | 14.45 GB | 17.6 t/s |
-  | mlx-community 9B 4-bit | 4.47 GB | 57.0 t/s |
-  | Q4_K_M 9B GGUF | 5.10 GB | 50.0 t/s |
-
-- **Speculation-off control (mlx-lm, 9B 4-bit): ~50 t/s for every prompt type, 88% of its ceiling.**
-  Content dependence comes entirely from MTP.
-- llama.cpp (b11960) Q4_K_M 9B: 36.3 t/s, about 72% of its ceiling.
-- With MTP on, counting beats the plain ceiling by 1.4× (9B, 69 t/s). Random words fall *below* it.
-  The 27B decodes random words at 15.7 t/s vs a 17.6 t/s ceiling, so speculation is a net loss on unpredictable text.
-- **Open question:** KV bytes predict 0.13 ms per 1k context tokens for the 9B (8 full-attention
-  layers × 32 KB/token). The measured 0.33 ms/1k is ~2.6× that. Attention is doing more
-  than streaming KV bytes. The depth sweep will show whether it stays linear.
+- A speculative pass costs ~2–2.6× a plain one (52 ms vs ~20 ms on the 9B).
 
 ## Adding a machine or model
 See `config/info.md`. In short: add the machine to `config/machines.json` (key = the slug
