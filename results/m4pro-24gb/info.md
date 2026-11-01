@@ -27,6 +27,8 @@ MacBook Pro, Apple M4 Pro 12C CPU / 16C GPU, 24 GB
 | `20261031-141641_ollama` | ollama | 54 |
 | `20261031-153514_mlx` | mlx | 52 |
 | `20261031-170441_llamacpp` | llamacpp | 45 |
+| `20261031-171242_ollama` | ollama | 26 |
+| `20261031-182451_mlx` | mlx | 27 |
 
 ## Notes
 

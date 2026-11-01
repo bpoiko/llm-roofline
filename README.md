@@ -123,11 +123,17 @@ bound. Q8_0's simple dequantization matches MLX's ~88%.
   prefilled at **62–68 t/s** at 4k context. From ~35% charge onward, 4k prefill sat at
   **92–107 t/s**, the same as in a rerun at 80–89% (median 97.6). Above ~35% the charge
   level made no difference.
-- **16k prefill got slower at high charge** (median 84.8 → 71.1 t/s), so charge level
-  can't explain it. That rerun followed ~3 hours of continuous load, and a 16k prefill is
-  ~4 minutes of solid compute, so thermals are the likely cause. Not yet confirmed (open question).
-- **Decode held steady through all of it** (27B essay 17.5–22.3 t/s in both runs). Decode
-  is bandwidth bound; prefill is compute bound, so it is what power and heat affect.
+- **MLX shows no charge effect at all above ~34%.** The 27B rerun at 90–96% charge matched the
+  main sweep at 34–43% within ~2% at every depth (16k prefill 101.5 vs 101.6 t/s, decode
+  14.2 vs 14.5).
+- **One anomaly: Ollama 27B 16k prefill was slower in its rerun** (median 84.8 → 71.1 t/s).
+  It isn't charge level, and it isn't machine-wide heat, since MLX ran 16k at full speed
+  under the same conditions. That Ollama run drove the system to **8% free memory** (Ollama
+  held 19.1 GB), and the session was stopped for low memory. Memory pressure during the 16k
+  prefill is the likely cause. Not yet confirmed.
+- **Decode held steady through all of it** (27B essay 17.5–22.3 t/s in both Ollama runs;
+  MLX within 2%). Decode is bandwidth bound; prefill is compute bound, so it is what power
+  affects.
 - **The MLX 27B (20.5 GB peak) draws more than 60 W:** the battery fell 44% → 34% during its
   stage, and the drain guard stopped it 2 cells early. The 9B and Ollama's 27B charged the
   battery throughout.
