@@ -23,7 +23,7 @@ _Last updated: 2026-10-31_
 | 4. Compare against `mlx_lm.lora` | ⬜ |
 | 5. QLoRA on the 9B 4-bit + training tokens/s vs compute roofline | ⬜ |
 
-`lora.py` and `train.py` are mine and not committed yet.
+`lora.py` and `train.py` are mine (first committed in `5f09a47`); `train.py` still has my TODOs.
 
 ## Gotchas I've already hit (don't relearn these)
 - **`freeze()` before wrapping.** New modules created afterwards are trainable, and a count of 0 right after the freeze is correct.
