@@ -43,3 +43,11 @@ m4pro-24gb,20261031-170441_llamacpp,llamacpp,~/.cache/huggingface/hub/models--un
 m4pro-24gb,20261031-170441_llamacpp,llamacpp,~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q8_0.gguf,qwen3.5-9b,synthetic,0,5,,26.72,372.56,,,8.5554,30.33,0.881
 m4pro-24gb,20261031-170441_llamacpp,llamacpp,~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q8_0.gguf,qwen3.5-9b,synthetic,16384,5,,24.89,305.82,,,8.5554,30.33,0.821
 m4pro-24gb,20261031-170441_llamacpp,llamacpp,~/.cache/huggingface/hub/models--unsloth--Qwen3.5-9B-GGUF/snapshots/3885219b6810b007914f3a7950a8d1b469d598a5/Qwen3.5-9B-Q8_0.gguf,qwen3.5-9b,synthetic,4096,5,,26.16,353.21,,,8.5554,30.33,0.863
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,counting,0,3,83.0,37.97,85.59,0.93,4.98,14.7722,17.57,2.161
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,counting,16384,3,86.0,22.28,70.12,1.0,3.33,15.8546,16.37,1.361
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,counting,4096,3,85.0,39.02,97.59,0.99,5.45,15.044,17.25,2.262
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,essay,0,3,84.0,21.99,102.68,0.63,1.88,14.7746,17.56,1.252
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,essay,16384,3,87.0,17.52,69.76,0.73,1.83,15.8554,16.37,1.07
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,essay,4096,3,85.0,22.24,97.17,0.72,1.82,15.0449,17.25,1.289
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,random,16384,2,84.5,15.31,78.79,0.42,1.32,15.8477,16.37,0.935
+m4pro-24gb,20261031-171242_ollama,ollama,qwen3.6:27b,qwen3.6-27b,random,4096,2,84.0,15.89,99.72,0.33,1.21,15.0343,17.26,0.921

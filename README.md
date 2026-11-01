@@ -118,15 +118,23 @@ Q3_K_M reads 17% fewer bytes than Q4_K_M but decodes **21% slower**. Unpacking 3
 K-quants costs enough GPU arithmetic per byte that decode is no longer purely bandwidth
 bound. Q8_0's simple dequantization matches MLX's ~88%.
 
-### 5. Power delivery limits compute, not bandwidth
-- Prefill is compute bound and moved with power. On a 60 W supply with the battery at
-  ~33%, Ollama 27B prefill at 4k ran at **62–68 t/s**; at ~42% it ran at **92–100 t/s**.
-  Decode, which is bandwidth bound, didn't move. *(A 27B rerun at ≥ 80% charge is in progress.)*
-- The MLX 27B (20.5 GB peak) draws more than 60 W: the battery fell 44% → 34% during its
+### 5. Power and heat move prefill, not decode
+- **Low charge on a 60 W supply limits compute.** The first Ollama 27B runs, at 31–33% battery,
+  prefilled at **62–68 t/s** at 4k context. From ~35% charge onward, 4k prefill sat at
+  **92–107 t/s**, the same as in a rerun at 80–89% (median 97.6). Above ~35% the charge
+  level made no difference.
+- **16k prefill got slower at high charge** (median 84.8 → 71.1 t/s), so charge level
+  can't explain it. That rerun followed ~3 hours of continuous load, and a 16k prefill is
+  ~4 minutes of solid compute, so thermals are the likely cause. Not yet confirmed (open question).
+- **Decode held steady through all of it** (27B essay 17.5–22.3 t/s in both runs). Decode
+  is bandwidth bound; prefill is compute bound, so it is what power and heat affect.
+- **The MLX 27B (20.5 GB peak) draws more than 60 W:** the battery fell 44% → 34% during its
   stage, and the drain guard stopped it 2 cells early. The 9B and Ollama's 27B charged the
   battery throughout.
 - Earlier attempts on battery and on a 30 W charger throttled decode by up to ~40% and were
   discarded. Hence the power guards in `suite.py` (see `bench/info.md`).
+- **24 GB is tight for a 27B at 16k context.** During the rerun, Ollama held 19.1 GB and the
+  system dropped to 8% free memory. Close other apps for 27B sweeps.
 
 ### Methodology traps found along the way
 - **Ollama's MTP draft depth persists across requests.** One low-acceptance request left the
